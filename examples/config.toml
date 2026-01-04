@@ -1,0 +1,61 @@
+[[load_balancer]]
+name = "backend 1  "
+
+[[load_balancer.backend]]
+address = "127.0.0.1:443"
+scheme = "https"
+weight = 5
+sni = "pqr.zennozenith.com" # optional, default is server.server _name
+
+[[load_balancer.backend]]
+address = "127.0.0.1:3060"
+
+[[load_balancer.backend]]
+address = "127.0.0.1:3061"
+
+[[load_balancer.backend]]
+address = "127.0.0.1:3059"
+
+# [[server]]
+# enable = false
+# name = "something.zennozenith.com"
+
+# [[server.http]]
+# listen_port = 4444
+
+# [[server.http.redirect]]
+# type = "MovedPermanently"
+# to = "https://google.com"
+
+[[server]]
+enable = true
+name = "abc.zennozenith.com"
+load_balancer_name = "backend 1"
+
+[[server.http]]
+listen_port = 6188
+
+
+[[server.https]]
+listen_port = 6189
+http2 = true
+ssl_certificate = "tests/keys/abc.zennozenith.com/server.crt"
+ssl_certificate_key = "tests/keys/abc.zennozenith.com/key.pem"
+
+[[server]]
+enable = true
+name = "pqr.zennozenith.com"
+
+[[server.http]]
+listen_port = 6188
+
+[[server.https]]
+listen_port = 6189
+http2 = true
+ssl_certificate = "tests/keys/pqr.zennozenith.com/server.crt"
+ssl_certificate_key = "tests/keys/pqr.zennozenith.com/key.pem"
+
+[server.proxy]
+address = "127.0.0.1:8096"
+# scheme = "http" ## Optional: Default (http)
+# sni = "pqr.zennozenith.com" # optional, default is server.server _name

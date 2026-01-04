@@ -1,0 +1,70 @@
+[workspace]
+members = []
+
+[workspace.package]
+version = "0.0.1"
+description = ""
+authors = ["Zenno Zenith <95485961+ZennoZenith@users.noreply.github.com>"]
+license = "GPL-3.0-or-later"
+edition = "2024"
+repository = "https://github.com/ZennoZenith/proxy-manager"
+# rust-version = "1.85"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+# unused = { level = "allow", priority = -1 } # For exploratory dev.
+
+
+[workspace.dependencies]
+axum = { version = "0.8", features = ["macros", "ws"] }
+chrono = "0.4"
+color-eyre = "0.6"
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = "1"
+serde_with = { version = "3", features = ["time_0_3"] }
+strum = "0.27"
+strum_macros = "0.27"
+thiserror = "2"
+tower = "0.5"
+tokio = { version = "1", features = ["full"] }
+tower-cookies = "0.11"
+tower-http = { version = "0.6", features = ["fs"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4", "fast-rng"] }
+
+[package]
+name = "proxy-manager"
+version.workspace = true
+description.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+# rust-version.workspace = true
+readme = "README.md"
+# keywords = ["proxy-manager"]
+
+[[example]]
+name = "example1"
+
+
+[dependencies]
+async-trait = "0.1"
+http = "1"
+toml = "0.9"
+pingora = { version = "0.6", features = ["cache", "lb", "openssl", "proxy"] }
+serde.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+strum.workspace = true
+strum_macros.workspace = true
+url = { version = "2", features = ["serde"] }
+color-eyre.workspace = true
+thiserror.workspace = true
+
+
+[dev-dependencies]
+
+[features]
+default = []

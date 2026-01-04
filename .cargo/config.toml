@@ -1,0 +1,10 @@
+[env]
+RUST_LOG = "test_servers=debug,lib_utils=debug,proxy_manager=debug"
+
+SERVICE_HOST = "0.0.0.0"
+SERVICE_PORT = "3060"
+
+TEST_SERVER_HOST_PORT = "0.0.0.0:3060"
+SERVICE_STATIC_FOLDER = "tools/test-servers/static"
+
+TEST_SERVER_HOST = "0.0.0.0"
