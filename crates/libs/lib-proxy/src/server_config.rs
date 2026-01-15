@@ -35,6 +35,7 @@ impl Deref for Upstream {
         &self.0
     }
 }
+
 impl DerefMut for Upstream {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0

@@ -1,0 +1,16 @@
+[package]
+name = "lib-config"
+version = "0.0.1"
+edition = "2024"
+
+[lib]
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+lib-utils = { path = "../../libs/lib-utils" }
+thiserror = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
