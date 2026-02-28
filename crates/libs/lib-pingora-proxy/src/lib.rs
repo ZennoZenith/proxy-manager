@@ -8,7 +8,7 @@ use pingora::{
     http::RequestHeader,
     lb::Backend,
     listeners::{self, TlsAccept},
-    prelude::{HttpPeer, Opt, Server},
+    prelude::{HttpPeer, Server},
     protocols::tls::TlsRef,
     proxy::{ProxyHttp, Session, http_proxy_service},
     tls::ssl,
@@ -19,6 +19,10 @@ use crate::config::{
 };
 
 fn backend_http_peer(server_name: &str, backend: Backend) -> Box<HttpPeer> {
+    // let scheme = backend.ext.get::<Scheme>();
+    // dbg!(&backend);
+    // dbg!(scheme);
+
     let tls = backend
         .ext
         .get::<Scheme>()
@@ -88,11 +92,19 @@ impl ProxyHttp for HostsToProxyType {
             )));
         };
 
+        // #[cfg(debug_assertions)]
+        // let host: Arc<str> = Arc::from("abc.zennozenith.com");
+
         let proxy_type = self
             .0
             .iter()
             .find(|v| v.0.iter().any(|t| t.as_ref() == host.as_ref()))
             .map(|v| &v.1);
+
+        #[cfg(debug_assertions)]
+        if proxy_type.is_none() {
+            tracing::warn!("No upstream peer for host: {}", host);
+        }
 
         let Some(proxy_type) = proxy_type else {
             return Err(pingora::Error::new(pingora::ErrorType::Custom(
@@ -100,7 +112,10 @@ impl ProxyHttp for HostsToProxyType {
             )));
         };
 
-        let peer = match proxy_type {
+        // #[cfg(debug_assertions)]
+        // dbg!(&proxy_type);
+
+        let mut peer = match proxy_type {
             ProxyType::Proxy {
                 addr,
                 scheme: Scheme::Http,
@@ -118,6 +133,10 @@ impl ProxyHttp for HostsToProxyType {
                 backend_http_peer(host.as_ref(), backend)
             }
         };
+
+        peer.options.verify_cert = false;
+        peer.options.verify_hostname = false;
+        // dbg!(&peer);
 
         Ok(peer)
     }
@@ -174,13 +193,12 @@ impl TlsAccept for HostsToSslCert {
 }
 
 pub fn run(config: lib_config::Config) -> color_eyre::Result<()> {
-    #[cfg(debug_assertions)]
-    dbg!(&config);
-
     let (http_server, https_server) = pingora_servers_from_config(config)?;
 
-    let opt = Opt::parse_args();
-    let mut my_server = Server::new(Some(opt)).unwrap();
+    // let opt = Opt::parse_args();
+    // let mut my_server = Server::new(Some(opt)).unwrap();
+
+    let mut my_server = Server::new(None).unwrap();
     my_server.bootstrap();
 
     let mut lb = http_proxy_service(&my_server.configuration, http_server.host_to_proxy_type);

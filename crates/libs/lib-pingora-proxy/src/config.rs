@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{BTreeSet, HashSet},
     net::SocketAddr,
     ops::{Deref, DerefMut},
     path::PathBuf,
@@ -7,7 +7,7 @@ use std::{
 };
 
 use pingora::{
-    lb::{Backend, LoadBalancer},
+    lb::{Backend, Backends, LoadBalancer},
     prelude::RoundRobin,
     tls::{pkey, x509::X509},
 };
@@ -65,7 +65,7 @@ pub(crate) struct PingoraHttpServer {
 #[derive(Clone, Debug)]
 pub(crate) struct PingoraHttpsServer {
     pub(crate) ports: Box<[u16]>,
-    pub(crate) http2: bool,
+    pub(crate) _http2: bool,
     pub(crate) host_to_proxy_type: HostsToProxyType,
     pub(crate) host_to_certs: HostsToSslCert,
 }
@@ -173,7 +173,7 @@ pub(crate) fn pingora_servers_from_config(
                 scheme: Scheme::from(scheme),
             },
             lib_config::ProxyType::LoadBalancer { alg: _alg, backend } => {
-                let backends = backend
+                let backends_set = backend
                     .iter()
                     .map(|backend| {
                         let mut b = Backend::new_with_weight(
@@ -188,16 +188,29 @@ pub(crate) fn pingora_servers_from_config(
 
                         b
                     })
-                    .collect::<Vec<Backend>>();
+                    .collect::<BTreeSet<Backend>>();
 
-                let mut upstream = LoadBalancer::try_from_iter(backends).unwrap();
+                let discovery = pingora::lb::discovery::Static::new(backends_set);
+                let backends = Backends::new(discovery);
+
+                let mut load_balancer = LoadBalancer::<RoundRobin>::from_backends(backends);
+
+                use futures::FutureExt;
+                load_balancer
+                    .update()
+                    .now_or_never()
+                    .expect("static should not block")
+                    .expect("static should not error");
+
+                #[cfg(debug_assertions)]
+                dbg!(load_balancer.backends().get_backend());
 
                 let hc = pingora::lb::health_check::TcpHealthCheck::new();
-                upstream.set_health_check(hc);
-                upstream.health_check_frequency = Some(std::time::Duration::from_secs(1));
+                load_balancer.set_health_check(hc);
+                load_balancer.health_check_frequency = Some(std::time::Duration::from_secs(1));
 
                 ProxyType::LoadBalancer {
-                    upstream: Upstream(Arc::new(upstream)),
+                    upstream: Upstream(Arc::new(load_balancer)),
                 }
             }
         };
@@ -246,7 +259,7 @@ pub(crate) fn pingora_servers_from_config(
     };
 
     let pingora_https_server = PingoraHttpsServer {
-        http2,
+        _http2: http2,
         ports: https_ports.into(),
         host_to_proxy_type: HostsToProxyType(https_host_to_proxy_type),
         host_to_certs: HostsToSslCert(host_to_certs),

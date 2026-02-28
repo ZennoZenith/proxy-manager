@@ -100,7 +100,7 @@ impl Config {
 mod tests {
     use crate::Config;
 
-    const CONFIG_FIXTURE: &str = include_str!("../example_config.toml");
+    const CONFIG_FIXTURE: &str = include_str!("../../lib-proxy/examples/config.toml");
 
     #[test]
     fn valid_example_config() {

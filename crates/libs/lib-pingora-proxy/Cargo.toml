@@ -12,6 +12,7 @@ readme = "README.md"
 
 [dependencies]
 pingora = { version = "0.7", features = ["cache", "lb", "openssl", "proxy"] }
+futures = "0.3"
 async-trait = { workspace = true }
 http = { workspace = true }
 tracing = { workspace = true }

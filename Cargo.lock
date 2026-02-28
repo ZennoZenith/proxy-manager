@@ -1818,6 +1818,7 @@ version = "0.0.1"
 dependencies = [
  "async-trait",
  "color-eyre",
+ "futures",
  "http",
  "lib-config",
  "pingora",
