@@ -8,7 +8,8 @@ use std::{
 
 use pingora::{
     lb::{Backend, Backends, LoadBalancer},
-    prelude::RoundRobin,
+    prelude::{RoundRobin, background_service},
+    services::background::GenBackgroundService,
     tls::{pkey, x509::X509},
 };
 
@@ -25,6 +26,7 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+pub type BgService = GenBackgroundService<LoadBalancer<RoundRobin>>;
 
 #[derive(Clone, Debug)]
 pub(crate) enum Scheme {
@@ -110,7 +112,7 @@ impl DerefMut for Upstream {
 
 pub(crate) fn pingora_servers_from_config(
     config: lib_proxy_config::Config,
-) -> Result<(PingoraHttpServer, PingoraHttpsServer)> {
+) -> Result<(PingoraHttpServer, PingoraHttpsServer, Vec<BgService>)> {
     let http_ports: Vec<u16> = config
         .server
         .iter()
@@ -130,6 +132,8 @@ pub(crate) fn pingora_servers_from_config(
         .collect();
 
     let mut server_names: Vec<String> = Vec::new();
+
+    let mut background_services: Vec<BgService> = Vec::new();
 
     let mut http_host_to_proxy_type: Vec<(Arc<[Box<str>]>, ProxyType)> = Vec::new();
 
@@ -209,8 +213,13 @@ pub(crate) fn pingora_servers_from_config(
                 load_balancer.set_health_check(hc);
                 load_balancer.health_check_frequency = Some(std::time::Duration::from_secs(1));
 
+                let bg_service = background_service("Tcp health check", load_balancer);
+                let load_balancer = bg_service.task();
+
+                background_services.push(bg_service);
+
                 ProxyType::LoadBalancer {
-                    upstream: Upstream(Arc::new(load_balancer)),
+                    upstream: Upstream(load_balancer),
                 }
             }
         };
@@ -265,5 +274,9 @@ pub(crate) fn pingora_servers_from_config(
         host_to_certs: HostsToSslCert(host_to_certs),
     };
 
-    Ok((pingora_http_server, pingora_https_server))
+    Ok((
+        pingora_http_server,
+        pingora_https_server,
+        background_services,
+    ))
 }

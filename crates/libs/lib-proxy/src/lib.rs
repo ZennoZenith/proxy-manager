@@ -185,7 +185,7 @@ impl TlsAccept for HostsToSslCert {
 }
 
 pub fn run(config: lib_proxy_config::Config) -> config::Result<()> {
-    let (http_server, https_server) = pingora_servers_from_config(config)?;
+    let (http_server, https_server, background_services) = pingora_servers_from_config(config)?;
 
     // TODO: Pingora crate config
     // let opt = Opt::parse_args();
@@ -219,6 +219,10 @@ pub fn run(config: lib_proxy_config::Config) -> config::Result<()> {
     }
 
     my_server.add_service(lb);
+
+    for background_service in background_services.into_iter() {
+        my_server.add_service(background_service);
+    }
 
     my_server.run_forever();
 }
