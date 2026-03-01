@@ -1,52 +1,65 @@
 [[server]]
 enable = true
-name = ["abc.zennozenith.com"]
-
-[server.listen.http]
-port = [6188]
-# port = [8080]
-
-[server.proxy]
-alg = "RoundRobin"
-type = "LoadBalancer"
-
-[[server.proxy.backend]]
-scheme.type = "https"
-scheme.sni = "example.com"
-address = "127.0.0.1:4004"
-weight = 2
-
-[[server.proxy.backend]]
-scheme.type = "http"
+name = ["xyz.zennozenith.com"]
+type = "redirect"
+http_code = 307
+preserve_path = false
+scheme.protocol = "http"
 address = "127.0.0.1:4000"
-weight = 1
 
-[[server.proxy.backend]]
-scheme.type = "http"
-address = "127.0.0.1:4001"
-weight = 1
+[[server.listen]]
+protocol = "http"
+port = [6188]
 
-[[server.proxy.backend]]
-scheme.type = "http"
-address = "127.0.0.1:4002"
-weight = 1
 
 [[server]]
 enable = true
 name = ["pqr.zennozenith.com"]
+type = "proxy"
+mode = "direct"
+address = "127.0.0.1:4000"
 
-[server.listen.http]
+[server.scheme]
+protocol = "https"
+sni = "pqr.zennozenith.com" ## optional
+
+[[server.listen]]
+protocol = "http"
 port = [6188]
-# port = [8080]
 
-[server.listen.https]
-# port = [8443]
+[[server.listen]]
+protocol = "https"
 port = [6189]
 http2 = true
 ssl_certificate = "examples/keys/pqr.zennozenith.com/server.crt"
 ssl_certificate_key = "examples/keys/pqr.zennozenith.com/key.pem"
 
-[server.proxy]
-type = "Proxy"
-scheme.type = "http"
+[[server]]
+enable = true
+name = ["abc.zennozenith.com", "aaa.zennozenith.com"]
+type = "proxy"
+mode = "loadbalanced"
+alg = "RoundRobin"
+
+[[server.listen]]
+protocol = "http"
+port = [6188]
+
+[[server.backend]]
+scheme.protocol = "https"
+scheme.sni = "example.com"
+address = "127.0.0.1:4004"
+weight = 2
+
+[[server.backend]]
+scheme.protocol = "http"
 address = "127.0.0.1:4000"
+
+[[server.backend]]
+scheme.protocol = "http"
+address = "127.0.0.1:4001"
+
+[[server.backend]]
+scheme.protocol = "http"
+address = "127.0.0.1:4002"
+weight = 1

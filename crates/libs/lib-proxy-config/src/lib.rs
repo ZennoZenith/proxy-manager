@@ -1,10 +1,15 @@
 use std::{
     collections::HashSet,
     net::SocketAddr,
+    num::NonZeroU16,
     path::{Path, PathBuf},
 };
 
 use serde::Deserialize;
+
+use crate::util::RedirectHttpCode;
+
+mod util;
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum Error {
@@ -29,14 +34,25 @@ pub struct Server {
     #[serde(default = "default_true")]
     pub enable: bool,
     pub name: HashSet<String>,
-    pub listen: Listen,
-    pub proxy: ProxyType,
+    // pub listen: Listen,
+    pub listen: Vec<Listen>,
+    #[serde(flatten, rename = "type")]
+    pub typ: ServerType,
+    // pub proxy: ProxyType,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct Listen {
-    pub http: Option<Http>,
-    pub https: Option<Https>,
+#[serde(tag = "protocol", rename_all = "lowercase")]
+pub enum Listen {
+    Http {
+        port: HashSet<u16>,
+    },
+    Https {
+        port: HashSet<u16>,
+        http2: bool,
+        ssl_certificate: PathBuf,
+        ssl_certificate_key: PathBuf,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -53,15 +69,31 @@ pub struct Https {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum ServerType {
+    Proxy(ProxyType),
+    Redirect(Redirect),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Redirect {
+    pub http_code: RedirectHttpCode,
+    #[serde(default)]
+    pub preserve_path: bool,
+    pub scheme: Scheme,
+    pub address: SocketAddr,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "mode", rename_all = "lowercase")]
 pub enum ProxyType {
-    LoadBalancer {
-        alg: LoadBalancingAlgo,
-        backend: Vec<Backend>,
-    },
-    Proxy {
+    Direct {
         scheme: Scheme,
         address: SocketAddr,
+    },
+    LoadBalanced {
+        alg: LoadBalancingAlgo,
+        backend: Vec<Backend>,
     },
 }
 
@@ -70,18 +102,23 @@ pub enum LoadBalancingAlgo {
     RoundRobin,
 }
 
+fn default_weight() -> NonZeroU16 {
+    NonZeroU16::new(1).expect("NonZeroU16 cannot be zero")
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct Backend {
-    pub weight: u16,
+    #[serde(default = "default_weight")]
+    pub weight: NonZeroU16,
     pub address: SocketAddr,
     pub scheme: Scheme,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(tag = "protocol", rename_all = "lowercase")]
 pub enum Scheme {
     Http,
-    Https { sni: String },
+    Https { sni: Option<String> },
 }
 
 impl Config {
