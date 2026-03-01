@@ -33,8 +33,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 http = "1"
 chrono = "0.4"
 time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
-strum = "0.27"
-strum_macros = "0.27"
+strum = "0.28"
+strum_macros = "0.28"
 uuid = { version = "1", features = ["v4", "fast-rng"] }
 
 # url = { version = "2", features = ["serde"] }
