@@ -1,10 +1,2 @@
 [env]
-RUST_LOG = "info,lib_pingora_proxy=debug,lib_config=debug,proxy=debug,lib_utils=debug,lib_proxy=debug,lib_auth=debug,web=debug"
-
-SERVICE_HOST = "0.0.0.0"
-SERVICE_PORT = "3060"
-
-TEST_SERVER_HOST_PORT = "0.0.0.0:3060"
-SERVICE_STATIC_FOLDER = "tools/test-servers/static"
-
-TEST_SERVER_HOST = "0.0.0.0"
+RUST_LOG = "info,lib_proxy_config=debug,lib_config=debug,proxy=debug"

@@ -1,7 +1,7 @@
 [package]
-name = "lib-config"
+name = "lib-proxy-config"
 version = "0.0.1"
-edition = "2024"
+edition.workspace = true
 
 [lib]
 doctest = false
@@ -10,7 +10,6 @@ doctest = false
 workspace = true
 
 [dependencies]
-lib-utils = { path = "../../libs/lib-utils" }
 thiserror = { workspace = true }
 serde = { workspace = true }
-toml = { workspace = true }
+toml = "0.9"

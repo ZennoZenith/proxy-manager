@@ -9,7 +9,8 @@ use serde::Deserialize;
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum Error {
     #[error("config (toml) deserialize err: {0:?}")]
-    Deserialize(#[from] toml::de::Error),
+    Deserialize(Box<str>),
+    // Deserialize(#[from] toml::de::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -85,7 +86,7 @@ pub enum Scheme {
 
 impl Config {
     pub fn load_from_toml_str(toml: &str) -> Result<Self> {
-        toml::from_str(toml).map_err(Error::Deserialize)
+        toml::from_str(toml).map_err(|e| Error::Deserialize(e.to_string().into()))
     }
 
     pub fn load_from_path<T: AsRef<Path>>(path: T) -> Result<Self> {
@@ -100,7 +101,7 @@ impl Config {
 mod tests {
     use crate::Config;
 
-    const CONFIG_FIXTURE: &str = include_str!("../../lib-proxy/examples/config.toml");
+    const CONFIG_FIXTURE: &str = include_str!("../../../../examples/config.toml");
 
     #[test]
     fn valid_example_config() {

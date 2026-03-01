@@ -1,603 +1,269 @@
 use std::{
-    collections::HashSet,
+    collections::{BTreeSet, HashSet},
     net::SocketAddr,
-    path::{Path, PathBuf},
+    ops::{Deref, DerefMut},
+    path::PathBuf,
+    sync::Arc,
 };
 
-use serde::Deserialize;
+use pingora::{
+    lb::{Backend, Backends, LoadBalancer},
+    prelude::RoundRobin,
+    tls::{pkey, x509::X509},
+};
 
-use crate::utils::{NonEmptyTrimedStr, Port, first_non_unique_ref};
-
-pub type Sni = NonEmptyTrimedStr;
-
-#[derive(
-    Clone, Copy, Debug, Default, Deserialize, PartialEq, PartialOrd, strum_macros::EnumString,
-)]
-#[strum(ascii_case_insensitive)]
-#[serde(rename_all = "lowercase")]
-pub enum Scheme {
-    #[default]
-    Http,
-    Https,
-}
-
-/// [https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Redirections]
-#[allow(unused)]
-#[derive(Clone, Copy, Debug, Default, Deserialize, strum_macros::EnumString)]
-pub enum RedirectionType {
-    /// Permanent redirections: 301, Moved Permanently
-    #[default]
-    MovedPermanently = 301,
-    /// Permanent redirections: 301, Permanent Redirect
-    PermanentRedirect = 308,
-
-    /// Temporary redirections: 301, Found
-    Found = 302,
-    /// Temporary redirections: 301, See Other
-    SeeOther = 303,
-    /// Temporary redirections: 301, Temporary Redirect
-    TemporaryRedirect = 307,
-
-    /// Special redirections: 300, Multiple Choices
-    MultipleChoices = 300,
-
-    /// Special redirections: 304, Not Modified
-    NotModified = 304,
-}
-
-#[derive(Debug, Clone, PartialEq, thiserror::Error, strum_macros::Display)]
-pub enum LoadBalancerError {
-    #[strum(to_string = "NameNotUnique:: Name: {0}")]
-    NameNotUnique(Box<str>),
-
-    AtleastOneBackend,
-}
-
-#[derive(Debug, Clone, PartialEq, thiserror::Error, strum_macros::Display)]
-pub enum ServerError {
-    AtLeastOne,
-
-    #[strum(to_string = "NameNotUnique:: Name: {0}")]
-    NameNotUnique(Box<str>),
-
-    #[strum(to_string = "NoServerType:: Name: {0}")]
-    NoServerType(Box<str>),
-
-    #[strum(to_string = "BothProxyAndLoadBalancing:: Name: {0}")]
-    ServerTypeBothProxyAndLoadBalancing(Box<str>),
-
-    #[strum(to_string = "HttpPortNotUniquePerServer:: Name: {0}, port: {1} ")]
-    HttpPortNotUniquePerServer(Box<str>, u16),
-
-    #[strum(to_string = "HttpsPortNotUniquePerServer:: Name: {0}, port: {1} ")]
-    HttpsPortNotUniquePerServer(Box<str>, u16),
-
-    #[strum(to_string = "BothAsHttpAndHttpsPort:: Port(s): {0:?}")]
-    BothAsHttpAndHttpsPort(Vec<Port>),
-
-    #[strum(to_string = "NoListeningPort:: Name: {0}")]
-    NoListeningPort(Box<str>),
-
-    #[strum(to_string = "UnknownLoadBalancer:: Name: {0}, LoadBalancerName: {1}")]
-    UnknownLoadBalancer(Box<str>, Box<str>),
-}
-
-#[derive(Debug, Clone, PartialEq, thiserror::Error, strum_macros::Display)]
+#[derive(Debug, thiserror::Error, strum_macros::Display)]
 pub enum Error {
-    Deserialize(#[from] toml::de::Error),
-    LoadBalancer(#[from] LoadBalancerError),
-    Server(#[from] ServerError),
+    #[strum(to_string = "ServerNameNotUnique:: {0}")]
+    ServerNameNotUnique(Box<str>),
+
+    #[strum(to_string = "CertificateIo:: Path: {0:?} , Err: {1}")]
+    CertificateIo(PathBuf, std::io::Error),
+
+    #[strum(to_string = "CertificateFormat:: {0:?}")]
+    CertificateFormat(PathBuf),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Clone, Debug, Deserialize)]
-pub(crate) struct Config {
-    #[serde(default)]
-    load_balancer: Vec<LoadBalancer>,
-    #[serde(default)]
-    server: Vec<Server>,
+#[derive(Clone, Debug)]
+pub(crate) enum Scheme {
+    Http,
+    Https { sni: Box<str> },
 }
 
-impl Config {
-    pub fn load_balancers(&self) -> &[LoadBalancer] {
-        &self.load_balancer
+impl From<lib_proxy_config::Scheme> for Scheme {
+    fn from(value: lib_proxy_config::Scheme) -> Self {
+        match value {
+            lib_proxy_config::Scheme::Http => Self::Http,
+            lib_proxy_config::Scheme::Https { sni } => Self::Https { sni: sni.into() },
+        }
     }
+}
 
-    pub fn servers(&self) -> &[Server] {
-        &self.server
+impl Scheme {
+    pub fn is_https(&self) -> bool {
+        match self {
+            Scheme::Http => false,
+            Scheme::Https { .. } => true,
+        }
     }
+}
 
-    pub fn load_from_toml_str(toml: &str) -> Result<Self> {
-        let config: Self = toml::from_str(toml).map_err(Error::Deserialize)?;
+#[derive(Clone, Debug)]
+pub(crate) struct HostsToProxyType(pub(crate) Vec<(Arc<[Box<str>]>, ProxyType)>);
 
-        config.verify()?;
+#[derive(Clone, Debug)]
+pub(crate) struct HostsToSslCert(pub(crate) Vec<(Arc<[Box<str>]>, SslCert)>);
 
-        Ok(config)
+#[derive(Clone, Debug)]
+pub(crate) struct PingoraHttpServer {
+    pub(crate) ports: Box<[u16]>,
+    pub(crate) host_to_proxy_type: HostsToProxyType,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct PingoraHttpsServer {
+    pub(crate) ports: Box<[u16]>,
+    pub(crate) _http2: bool,
+    pub(crate) host_to_proxy_type: HostsToProxyType,
+    pub(crate) host_to_certs: HostsToSslCert,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct SslCert {
+    pub(crate) certificate: X509,
+    pub(crate) private_key: pkey::PKey<pkey::Private>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum ProxyType {
+    Proxy { addr: SocketAddr, scheme: Scheme },
+    LoadBalancer { upstream: Upstream },
+}
+
+#[derive(Clone)]
+pub(crate) struct Upstream(pub(crate) Arc<LoadBalancer<RoundRobin>>);
+
+// TODO: Better Debug implementation
+impl std::fmt::Debug for Upstream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Upstream")
+            .field("0", &"some upsterams...")
+            .finish()
     }
+}
 
-    pub fn load_from_path<T: AsRef<Path>>(path: T) -> Result<Self> {
-        let file_content =
-            std::fs::read_to_string(path).expect("Should have been able to read the config file");
+impl Deref for Upstream {
+    type Target = Arc<LoadBalancer<RoundRobin>>;
 
-        Self::load_from_toml_str(&file_content)
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
+}
 
-    pub fn verify(&self) -> Result<()> {
-        self.verify_load_balancer()?;
-        self.verify_server()?;
-
-        Ok(())
+impl DerefMut for Upstream {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
+}
 
-    fn verify_load_balancer(&self) -> Result<()> {
-        //// At least on backend per load balancer
-        let backend_lengths = self
-            .load_balancer
+pub(crate) fn pingora_servers_from_config(
+    config: lib_proxy_config::Config,
+) -> Result<(PingoraHttpServer, PingoraHttpsServer)> {
+    let http_ports: Vec<u16> = config
+        .server
+        .iter()
+        .filter_map(|v| v.listen.http.as_ref())
+        .flat_map(|http| http.port.iter().copied())
+        .collect::<HashSet<u16>>()
+        .into_iter()
+        .collect();
+
+    let https_ports: Vec<u16> = config
+        .server
+        .iter()
+        .filter_map(|v| v.listen.https.as_ref())
+        .flat_map(|http| http.port.iter().copied())
+        .collect::<HashSet<u16>>()
+        .into_iter()
+        .collect();
+
+    let mut server_names: Vec<String> = Vec::new();
+
+    let mut http_host_to_proxy_type: Vec<(Arc<[Box<str>]>, ProxyType)> = Vec::new();
+
+    let mut https_host_to_proxy_type: Vec<(Arc<[Box<str>]>, ProxyType)> = Vec::new();
+
+    let mut http2 = false;
+
+    let mut host_to_certs: Vec<(Arc<[Box<str>]>, SslCert)> = Vec::new();
+
+    for server in config.server.into_iter() {
+        if !server.enable {
+            continue;
+        }
+
+        // TODO: optimize vec allocation
+        if server.listen.http.is_none() && server.listen.https.is_none() {
+            tracing::warn!(
+                "No listen block for server names: {:?}",
+                &Vec::from_iter(server.name.iter())
+            );
+            continue;
+        }
+
+        for server_name in server.name.iter() {
+            if server_names.contains(server_name) {
+                return Err(Error::ServerNameNotUnique(Box::from(server_name.clone())));
+            }
+
+            server_names.push(server_name.clone());
+        }
+
+        let boxed_server_names = server
+            .name
             .iter()
-            .map(|v| v.backend.len())
-            .collect::<Vec<usize>>();
-        if backend_lengths.contains(&0) {
-            return Err(Error::LoadBalancer(LoadBalancerError::AtleastOneBackend));
+            .map(|v| Box::from(v.clone()))
+            .collect::<Arc<[Box<str>]>>();
+
+        let proxy_type = match server.proxy {
+            lib_proxy_config::ProxyType::Proxy { scheme, address } => ProxyType::Proxy {
+                addr: address,
+                scheme: Scheme::from(scheme),
+            },
+            lib_proxy_config::ProxyType::LoadBalancer { alg: _alg, backend } => {
+                let backends_set = backend
+                    .iter()
+                    .map(|backend| {
+                        let mut b = Backend::new_with_weight(
+                            &backend.address.to_string(),
+                            backend.weight as usize,
+                        )
+                        .unwrap_or_else(|ex| {
+                            panic!("FATAL - WHILE CREATING BACKENDS - Cause: {ex:?}")
+                        });
+
+                        b.ext.insert(Scheme::from(backend.scheme.clone()));
+
+                        b
+                    })
+                    .collect::<BTreeSet<Backend>>();
+
+                let discovery = pingora::lb::discovery::Static::new(backends_set);
+                let backends = Backends::new(discovery);
+
+                let mut load_balancer = LoadBalancer::<RoundRobin>::from_backends(backends);
+
+                use futures::FutureExt;
+                load_balancer
+                    .update()
+                    .now_or_never()
+                    .expect("static should not block")
+                    .expect("static should not error");
+
+                #[cfg(debug_assertions)]
+                dbg!(load_balancer.backends().get_backend());
+
+                let hc = pingora::lb::health_check::TcpHealthCheck::new();
+                load_balancer.set_health_check(hc);
+                load_balancer.health_check_frequency = Some(std::time::Duration::from_secs(1));
+
+                ProxyType::LoadBalancer {
+                    upstream: Upstream(Arc::new(load_balancer)),
+                }
+            }
         };
 
-        //// Unique load balancer name
-        let non_unique_load_balancer_name =
-            first_non_unique_ref(self.load_balancer.iter().map(|v| v.name.as_ref()));
-
-        if let Some(name) = non_unique_load_balancer_name {
-            return Err(Error::LoadBalancer(LoadBalancerError::NameNotUnique(
-                name.into(),
-            )));
-        };
-
-        Ok(())
-    }
-
-    fn verify_server(&self) -> Result<()> {
-        if self.server.is_empty() {
-            return Err(Error::Server(ServerError::AtLeastOne));
+        if server.listen.http.is_some() {
+            http_host_to_proxy_type.push((boxed_server_names.clone(), proxy_type.clone()));
         }
 
-        //// Unique server names
-        let non_unique_server_names =
-            first_non_unique_ref(self.server.iter().map(|v| v.name.as_ref()));
-        if let Some(name) = non_unique_server_names {
-            return Err(Error::Server(ServerError::NameNotUnique(name.into())));
-        };
-
-        //// No server type
-        for server in self.server.iter() {
-            if server.load_balancer_name.is_none() && server.proxy.is_none() {
-                return Err(Error::Server(ServerError::NoServerType(
-                    server.name.as_ref().into(),
-                )));
+        if let Some(lib_proxy_config::Https {
+            http2: server_http2,
+            ssl_certificate,
+            ssl_certificate_key,
+            ..
+        }) = server.listen.https
+        {
+            if server_http2 {
+                http2 = true;
             }
-        }
 
-        //// No server type
-        for server in self.server.iter() {
-            if server.load_balancer_name.is_some() && server.proxy.is_some() {
-                return Err(Error::Server(
-                    ServerError::ServerTypeBothProxyAndLoadBalancing(server.name.as_ref().into()),
-                ));
-            }
-        }
+            https_host_to_proxy_type.push((boxed_server_names.clone(), proxy_type));
 
-        //// No listening port
-        for server in self.server.iter() {
-            if server.http.is_empty() && server.https.is_empty() {
-                return Err(Error::Server(ServerError::NoListeningPort(
-                    server.name.as_ref().into(),
-                )));
-            }
-        }
+            let ssl_certificate = X509::from_pem(
+                &std::fs::read(&ssl_certificate)
+                    .map_err(|e| Error::CertificateIo(ssl_certificate.clone(), e))?,
+            )
+            .map_err(|_| Error::CertificateFormat(ssl_certificate.clone()))?;
 
-        // tracing::warn!(
-        //     "server_name: {} not listening on any port, try adding http or https attribute",
-        //     v.name
-        // );
+            let ssl_private_key = pkey::PKey::private_key_from_pem(
+                &std::fs::read(&ssl_certificate_key)
+                    .map_err(|e| Error::CertificateIo(ssl_certificate_key.clone(), e))?,
+            )
+            .map_err(|_| Error::CertificateFormat(ssl_certificate_key.clone()))?;
 
-        //// server http listen port not unique
-        for server in self.server.iter() {
-            let non_unique_port = first_non_unique_ref(server.http.iter().map(|t| &t.listen_port));
-
-            if let Some(port) = non_unique_port {
-                return Err(Error::Server(ServerError::HttpPortNotUniquePerServer(
-                    server.name.as_ref().into(),
-                    **port,
-                )));
+            let ssl_cert = SslCert {
+                certificate: ssl_certificate,
+                private_key: ssl_private_key,
             };
+
+            host_to_certs.push((boxed_server_names, ssl_cert));
         }
-
-        //// server https listen port not unique
-        for server in self.server.iter() {
-            let non_unique_port = first_non_unique_ref(server.https.iter().map(|t| &t.listen_port));
-
-            if let Some(port) = non_unique_port {
-                return Err(Error::Server(ServerError::HttpsPortNotUniquePerServer(
-                    server.name.as_ref().into(),
-                    **port,
-                )));
-            };
-        }
-
-        //// server common http https port
-        let http_ports = self
-            .server
-            .iter()
-            .flat_map(|v| v.http.iter().map(|t| t.listen_port))
-            .collect::<HashSet<Port>>();
-
-        let https_ports = self
-            .server
-            .iter()
-            .flat_map(|v| v.https.iter().map(|t| t.listen_port))
-            .collect::<HashSet<Port>>();
-
-        let common_btw_http_and_https = http_ports
-            .intersection(&https_ports)
-            .copied()
-            .collect::<Vec<Port>>();
-
-        if !common_btw_http_and_https.is_empty() {
-            return Err(Error::Server(ServerError::BothAsHttpAndHttpsPort(
-                common_btw_http_and_https,
-            )));
-        }
-
-        //// server unknown load balancer name
-        let unique_load_balancer_names = self
-            .load_balancer
-            .iter()
-            .map(|v| &v.name)
-            .collect::<HashSet<&NonEmptyTrimedStr>>();
-
-        for server in self.server.iter() {
-            if let Some(load_balancer_name) = server.load_balancer_name.as_ref()
-                && !unique_load_balancer_names.contains(load_balancer_name)
-            {
-                return Err(Error::Server(ServerError::UnknownLoadBalancer(
-                    server.name.clone().into(),
-                    server
-                        .load_balancer_name
-                        .clone()
-                        .expect("load_balancer_name should have been present")
-                        .into(),
-                )));
-            }
-        }
-        Ok(())
     }
-}
 
-#[derive(Clone, Debug, Deserialize)]
-pub(crate) struct LoadBalancer {
-    pub(crate) name: NonEmptyTrimedStr,
-    pub(crate) backend: Vec<BackendConfig>,
-}
-
-fn default_usize_1() -> usize {
-    1
-}
-#[derive(Clone, Debug, Deserialize)]
-pub(crate) struct BackendConfig {
-    #[serde(default)]
-    pub(crate) scheme: Scheme,
-    pub(crate) address: SocketAddr,
-    #[serde(default = "default_usize_1")]
-    pub(crate) weight: usize,
-
-    /// Required when protocol::HTTPS
-    pub(crate) sni: Option<Sni>,
-}
-
-fn default_true() -> bool {
-    true
-}
-#[derive(Clone, Debug, Deserialize)]
-pub(crate) struct Server {
-    #[serde(default = "default_true")]
-    pub(crate) enable: bool,
-    pub(crate) name: NonEmptyTrimedStr,
-
-    #[serde(default)]
-    pub(crate) http: Vec<Http>,
-    #[serde(default)]
-    pub(crate) https: Vec<Https>,
-
-    pub(crate) proxy: Option<Proxy>,
-    pub(crate) load_balancer_name: Option<NonEmptyTrimedStr>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub(crate) struct Http {
-    pub(crate) listen_port: Port,
-    // pub(crate) redirect: Option<RedirectConfig>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub(crate) struct Https {
-    pub(crate) listen_port: Port,
-    // pub(crate) redirect: Option<RedirectConfig>,
-    #[serde(default)]
-    pub(crate) http2: bool,
-
-    pub(crate) ssl_certificate: PathBuf,
-    pub(crate) ssl_certificate_key: PathBuf,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct Proxy {
-    #[serde(default)]
-    pub(crate) scheme: Scheme,
-    pub(crate) address: SocketAddr,
-
-    /// Required when protocol::Https
-    pub(crate) sni: Option<Sni>,
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{
-        config::{Config, Error, LoadBalancerError, ServerError},
-        utils::Port,
+    let pingora_http_server = PingoraHttpServer {
+        ports: http_ports.into(),
+        host_to_proxy_type: HostsToProxyType(http_host_to_proxy_type),
     };
 
-    #[test]
-    fn loadbalancer_name_unique() {
-        const CONFIG: &str = r#"
-            [[load_balancer]]
-            name = "backend 1 "
+    let pingora_https_server = PingoraHttpsServer {
+        _http2: http2,
+        ports: https_ports.into(),
+        host_to_proxy_type: HostsToProxyType(https_host_to_proxy_type),
+        host_to_certs: HostsToSslCert(host_to_certs),
+    };
 
-            [[load_balancer.backend]]
-            address = "127.0.0.1:3059"
-
-            [[load_balancer]]
-            name = "backend 1 "
-
-            [[load_balancer.backend]]
-            address = "127.0.0.1:3059"
-        "#;
-
-        let config = Config::load_from_toml_str(CONFIG);
-
-        assert!(config.is_err(), "Config did not error");
-        assert_eq!(
-            config.unwrap_err(),
-            Error::LoadBalancer(LoadBalancerError::NameNotUnique(Box::from("backend 1")))
-        )
-    }
-
-    #[test]
-    fn loadbalancer_name_not_empty() {
-        const CONFIG: &str = r#"
-            [[load_balancer]]
-            name = "backend 1"
-
-            [[load_balancer.backend]]
-            address = "127.0.0.1:3059"
-
-            [[load_balancer]]
-            name = "  "
-
-            [[load_balancer.backend]]
-            address = "127.0.0.1:3059"
-        "#;
-
-        let config = Config::load_from_toml_str(CONFIG);
-
-        assert!(config.is_err(), "Config did not error");
-        if let Error::Deserialize(_) = config.unwrap_err() {
-        } else {
-            panic!("Error not of type Error::Deserialize")
-        }
-    }
-
-    #[test]
-    fn loadbalancer_atleast_one_backend() {
-        const CONFIG: &str = r#"
-            [[load_balancer]]
-            name = "backend 1"
-            backend = []
-        "#;
-
-        let config = Config::load_from_toml_str(CONFIG);
-
-        assert!(config.is_err(), "Config did not error");
-        if let Error::LoadBalancer(LoadBalancerError::AtleastOneBackend) = config.unwrap_err() {
-        } else {
-            panic!("Error not of type Error::LoadBalancer(LoadBalancerError::BackendEmpty)")
-        }
-    }
-
-    #[test]
-    fn server_atleast_one() {
-        const CONFIG: &str = r#"
-            server = []
-        "#;
-
-        let config = Config::load_from_toml_str(CONFIG);
-
-        assert!(config.is_err(), "Config did not error");
-        if let Error::Server(ServerError::AtLeastOne) = config.unwrap_err() {
-        } else {
-            panic!("Error not of type Error::Server(ServerError::AtLeastOne)")
-        }
-    }
-
-    #[test]
-    fn server_at_least_one() {
-        const CONFIG: &str = r#""#;
-
-        let config = Config::load_from_toml_str(CONFIG);
-
-        assert!(config.is_err(), "Config did not error");
-        assert_eq!(config.unwrap_err(), Error::Server(ServerError::AtLeastOne))
-    }
-
-    #[test]
-    fn server_name_unique() {
-        const CONFIG: &str = r#"
-            [[server]]
-            name = "abc.zennozenith.com"
-
-            [[server]]
-            name = "abc.zennozenith.com"
-        "#;
-
-        let config = Config::load_from_toml_str(CONFIG);
-
-        assert!(config.is_err(), "Config did not error");
-        assert_eq!(
-            config.unwrap_err(),
-            Error::Server(ServerError::NameNotUnique(Box::from("abc.zennozenith.com")))
-        )
-    }
-
-    #[test]
-    fn server_name_not_empty() {
-        const CONFIG: &str = r#"
-            [[server]]
-            name = "  "
-        "#;
-
-        let config = Config::load_from_toml_str(CONFIG);
-
-        assert!(config.is_err(), "Config did not error");
-        if let Error::Deserialize(_) = config.unwrap_err() {
-        } else {
-            panic!("Error not of type Error::Deserialize")
-        }
-    }
-
-    #[test]
-    fn server_no_server_type() {
-        const CONFIG: &str = r#"
-            [[server]]
-            name = "example.com"
-        "#;
-
-        let config = Config::load_from_toml_str(CONFIG);
-
-        assert!(config.is_err(), "Config did not error");
-        assert_eq!(
-            config.unwrap_err(),
-            Error::Server(ServerError::NoServerType(Box::from("example.com")))
-        )
-    }
-
-    #[test]
-    fn server_server_type_both_proxy_load_balancing() {
-        const CONFIG: &str = r#"
-            [[load_balancer]]
-            name = "backend 1  "
-
-            [[load_balancer.backend]]
-            address = "127.0.0.1:3060"
-
-            [[server]]
-            name = "example.com"
-            load_balancer_name = "backend 1  "
-
-            [[server.http]]
-            listen_port = 6188
-
-            [server.proxy]
-            address = "127.0.0.1:8096"
-            host = "127.0.0.1"
-        "#;
-
-        let config = Config::load_from_toml_str(CONFIG);
-
-        assert!(config.is_err(), "Config did not error");
-        assert_eq!(
-            config.unwrap_err(),
-            Error::Server(ServerError::ServerTypeBothProxyAndLoadBalancing(Box::from(
-                "example.com"
-            )))
-        )
-    }
-
-    #[test]
-    fn server_no_listening_port() {
-        const CONFIG: &str = r#"
-            [[server]]
-            name = "example.com"
-
-            [server.proxy]
-            address = "127.0.0.1:8096"
-            host = "127.0.0.1"
-        "#;
-
-        let config = Config::load_from_toml_str(CONFIG);
-
-        assert!(config.is_err(), "Config did not error");
-        assert_eq!(
-            config.unwrap_err(),
-            Error::Server(ServerError::NoListeningPort(Box::from("example.com")))
-        )
-    }
-
-    #[test]
-    fn server_disjoint_http_https_port() {
-        const CONFIG: &str = r#"
-            [[server]]
-            name = "example.com"
-
-            [[server.http]]
-            listen_port = 6188
-
-            [[server.https]]
-            listen_port = 6188
-            http2 = true
-            ssl_certificate = "tests/keys/abc.zennozenith.com/server.crt"
-            ssl_certificate_key = "tests/keys/abc.zennozenith.com/key.pem"
-
-            [server.proxy]
-            address = "127.0.0.1:8096"
-            host = "127.0.0.1"
-        "#;
-
-        let config = Config::load_from_toml_str(CONFIG);
-
-        assert!(config.is_err(), "Config did not error");
-        assert_eq!(
-            config.unwrap_err(),
-            Error::Server(ServerError::BothAsHttpAndHttpsPort(vec![Port::from(6188)]))
-        )
-    }
-
-    #[test]
-    fn server_unknown_load_balancer_name() {
-        const CONFIG: &str = r#"
-            [[server]]
-            name = "example.com"
-
-            [[server.http]]
-            listen_port = 6188
-
-            [server.proxy]
-            address = "127.0.0.1:8096"
-            host = "127.0.0.1"
-
-            [[server]]
-            name = "abc.example.com"
-            load_balancer_name = "backend 1"
-
-            [[server.http]]
-            listen_port = 6188
-        "#;
-
-        let config = Config::load_from_toml_str(CONFIG);
-
-        assert!(config.is_err(), "Config did not error");
-        assert_eq!(
-            config.unwrap_err(),
-            Error::Server(ServerError::UnknownLoadBalancer(
-                Box::from("abc.example.com"),
-                Box::from("backend 1")
-            ))
-        )
-    }
+    Ok((pingora_http_server, pingora_https_server))
 }

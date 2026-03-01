@@ -1,12 +1,7 @@
 [workspace]
 members = [
-  "crates/libs/lib-auth",
-  "crates/libs/lib-config",
+  "crates/libs/lib-proxy-config",
   "crates/libs/lib-proxy",
-  "crates/libs/lib-pingora-proxy",
-  # "crates/libs/lib-angie-proxy",
-  "crates/libs/lib-utils",
-  "crates/libs/lib-web",
   "crates/services/proxy",
 ]
 resolver = "3"
@@ -18,6 +13,7 @@ authors = ["Zenno Zenith <95485961+ZennoZenith@users.noreply.github.com>"]
 license = "GNU AGPLv3"
 edition = "2024"
 repository = "https://github.com/ZennoZenith/proxy-manager"
+keywords = ["proxy-manager"]
 # rust-version = "1.92"
 
 [workspace.lints.rust]
@@ -26,36 +22,36 @@ unsafe_code = "forbid"
 
 
 [workspace.dependencies]
-async-trait = "0.1"
 clap = { version = "4.5", features = ["derive"] }
-http = "1"
-toml = "0.9"
-axum = { version = "0.8", features = ["macros", "ws"] }
-chrono = "0.4"
-time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
-color-eyre = "0.6"
-sqlx = { version = "0.8", features = [
-  "macros",
-  "runtime-tokio",
-  "postgres",
-  "uuid",
-  "time",
-  "chrono",
-  "bigdecimal",
-  "bit-vec",
-] }
-serde = { version = "1", features = ["derive", "rc"] }
-serde_json = "1"
-serde_with = { version = "3", features = ["time_0_3"] }
-strum = "0.27"
-strum_macros = "0.27"
 thiserror = "2"
-tower = "0.5"
-tokio = { version = "1", features = ["full"] }
-tower-cookies = "0.11"
-tower-http = { version = "0.6", features = ["fs"] }
+color-eyre = "0.6"
+# miette = { version = "7.6.0", features = ["fancy"] }
+serde = { version = "1", features = ["derive", "rc"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+http = "1"
+chrono = "0.4"
+time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
+strum = "0.27"
+strum_macros = "0.27"
 uuid = { version = "1", features = ["v4", "fast-rng"] }
-url = { version = "2", features = ["serde"] }
-miette = { version = "7.6.0", features = ["fancy"] }
+
+# url = { version = "2", features = ["serde"] }
+# axum = { version = "0.8", features = ["macros", "ws"] }
+# sqlx = { version = "0.8", features = [
+#   "macros",
+#   "runtime-tokio",
+#   "postgres",
+#   "uuid",
+#   "time",
+#   "chrono",
+#   "bigdecimal",
+#   "bit-vec",
+# ] }
+# serde_json = "1"
+# serde_with = { version = "3", features = ["time_0_3"] }
+# tower = "0.5"
+# tokio = { version = "1", features = ["full"] }
+# tower-cookies = "0.11"
+# tower-http = { version = "0.6", features = ["fs"] }

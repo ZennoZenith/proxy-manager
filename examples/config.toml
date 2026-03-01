@@ -43,8 +43,8 @@ port = [6188]
 # port = [8443]
 port = [6189]
 http2 = true
-ssl_certificate = "tests/keys/pqr.zennozenith.com/server.crt"
-ssl_certificate_key = "tests/keys/pqr.zennozenith.com/key.pem"
+ssl_certificate = "examples/keys/pqr.zennozenith.com/server.crt"
+ssl_certificate_key = "examples/keys/pqr.zennozenith.com/key.pem"
 
 [server.proxy]
 type = "Proxy"
