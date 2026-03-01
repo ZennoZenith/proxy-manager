@@ -7,9 +7,10 @@ use std::{
 
 use serde::Deserialize;
 
-use crate::util::RedirectHttpCode;
-
 mod util;
+
+use url::Url;
+pub use util::RedirectHttpCode;
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum Error {
@@ -34,25 +35,16 @@ pub struct Server {
     #[serde(default = "default_true")]
     pub enable: bool,
     pub name: HashSet<String>,
-    // pub listen: Listen,
-    pub listen: Vec<Listen>,
+    pub listen: Listen,
     #[serde(flatten, rename = "type")]
     pub typ: ServerType,
-    // pub proxy: ProxyType,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "protocol", rename_all = "lowercase")]
-pub enum Listen {
-    Http {
-        port: HashSet<u16>,
-    },
-    Https {
-        port: HashSet<u16>,
-        http2: bool,
-        ssl_certificate: PathBuf,
-        ssl_certificate_key: PathBuf,
-    },
+#[serde(rename_all = "lowercase")]
+pub struct Listen {
+    pub http: Option<Http>,
+    pub https: Option<Https>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -80,8 +72,8 @@ pub struct Redirect {
     pub http_code: RedirectHttpCode,
     #[serde(default)]
     pub preserve_path: bool,
-    pub scheme: Scheme,
-    pub address: SocketAddr,
+    // pub scheme: Scheme,
+    pub location: Url,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -118,7 +110,10 @@ pub struct Backend {
 #[serde(tag = "protocol", rename_all = "lowercase")]
 pub enum Scheme {
     Http,
-    Https { sni: Option<String> },
+    Https {
+        #[serde(default)]
+        sni: String,
+    },
 }
 
 impl Config {

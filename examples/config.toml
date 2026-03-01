@@ -3,12 +3,11 @@ enable = true
 name = ["xyz.zennozenith.com"]
 type = "redirect"
 http_code = 307
-preserve_path = false
-scheme.protocol = "http"
-address = "127.0.0.1:4000"
+preserve_path = true
+# scheme.protocol = "http"
+location = "https://pqr.zennozenith.com"
 
-[[server.listen]]
-protocol = "http"
+[server.listen.http]
 port = [6188]
 
 
@@ -17,18 +16,16 @@ enable = true
 name = ["pqr.zennozenith.com"]
 type = "proxy"
 mode = "direct"
-address = "127.0.0.1:4000"
+address = "127.0.0.1:4004"
 
 [server.scheme]
 protocol = "https"
 sni = "pqr.zennozenith.com" ## optional
 
-[[server.listen]]
-protocol = "http"
+[server.listen.http]
 port = [6188]
 
-[[server.listen]]
-protocol = "https"
+[server.listen.https]
 port = [6189]
 http2 = true
 ssl_certificate = "examples/keys/pqr.zennozenith.com/server.crt"
@@ -41,8 +38,7 @@ type = "proxy"
 mode = "loadbalanced"
 alg = "RoundRobin"
 
-[[server.listen]]
-protocol = "http"
+[server.listen.http]
 port = [6188]
 
 [[server.backend]]

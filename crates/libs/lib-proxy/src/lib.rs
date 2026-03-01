@@ -5,7 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use http::header::HOST;
 use pingora::{
-    http::RequestHeader,
+    http::{RequestHeader, ResponseHeader},
     lb::Backend,
     listeners::{self, TlsAccept},
     prelude::{HttpPeer, Server},
@@ -15,7 +15,7 @@ use pingora::{
 };
 
 use crate::config::{
-    HostsToProxyType, HostsToSslCert, ProxyType, Scheme, SslCert, pingora_servers_from_config,
+    HostsToServerType, HostsToSslCert, Scheme, ServerType, SslCert, pingora_servers_from_config,
 };
 
 fn backend_http_peer(server_name: &str, backend: Backend) -> Box<HttpPeer> {
@@ -40,7 +40,7 @@ struct Ctx {
 }
 
 #[async_trait]
-impl ProxyHttp for HostsToProxyType {
+impl ProxyHttp for HostsToServerType {
     type CTX = Ctx;
 
     fn new_ctx(&self) -> Self::CTX {
@@ -59,20 +59,56 @@ impl ProxyHttp for HostsToProxyType {
             .or_else(|| session.req_header().uri.host())
             .map(Arc::from);
 
-        if let Some(host) = ctx.host.clone() {
+        let Some(host) = ctx.host.as_deref() else {
+            tracing::warn!("Unable to extract host header");
+            return Ok(true);
+        };
+
+        session
+            .req_header_mut()
+            .insert_header("Host", host.to_string())
+            .unwrap();
+
+        let server_type = self
+            .0
+            .iter()
+            .find(|v| v.0.iter().any(|t| t.as_ref() == host))
+            .map(|v| &v.1);
+
+        if let Some(ServerType::Redirect {
+            http_code,
+            preserve_path,
+            location,
+        }) = server_type
+        {
+            let mut final_location = location.as_str().to_owned();
+
+            if *preserve_path
+                && let Some(path_and_query) = session.req_header().uri.path_and_query()
+                && let Some(base) = final_location.strip_suffix('/')
+            {
+                final_location = format!("{base}{}", path_and_query.as_str());
+            }
+
+            let mut resp = ResponseHeader::build(Into::<u16>::into(http_code), None)?;
+            resp.append_header("Location", &final_location)?;
+            session.write_response_header(Box::new(resp), true).await?;
+
+            return Ok(true);
+        };
+
+        if host == "test.zennozenith.com" {
+            let body = "Hello from Pingora!";
+            let mut resp = ResponseHeader::build(200, None)?;
+            resp.insert_header("Content-Type", "text/plain")?;
+            resp.insert_header("Content-Length", body.len().to_string())?;
+
+            session.write_response_header(Box::new(resp), false).await?;
             session
-                .req_header_mut()
-                .insert_header("Host", host.to_string())
-                .unwrap();
+                .write_response_body(Some(bytes::Bytes::from(body)), true)
+                .await?;
+            return Ok(true);
         }
-
-        // if true {
-        //     let mut resp = ResponseHeader::build(301, None)?;
-        //     resp.append_header("Location", "https://google.com")?;
-
-        //     let _ = session.write_response_header(Box::new(resp), true).await;
-        //     return Ok(true);
-        // }
 
         Ok(false)
     }
@@ -88,38 +124,41 @@ impl ProxyHttp for HostsToProxyType {
             )));
         };
 
-        let proxy_type = self
+        let server_type = self
             .0
             .iter()
             .find(|v| v.0.iter().any(|t| t.as_ref() == host.as_ref()))
             .map(|v| &v.1);
 
         #[cfg(debug_assertions)]
-        if proxy_type.is_none() {
+        if server_type.is_none() {
             tracing::warn!("No upstream peer for host: {}", host);
         }
 
-        let Some(proxy_type) = proxy_type else {
+        let Some(server_type) = server_type else {
             return Err(pingora::Error::new(pingora::ErrorType::Custom(
                 "No proxy for give host",
             )));
         };
 
-        let mut peer = match proxy_type {
-            ProxyType::Proxy {
+        let mut peer = match server_type {
+            ServerType::Redirect { .. } => {
+                tracing::error!("Redirect host should not have reached upstream_peer phase");
+                return Err(pingora::Error::new(pingora::ErrorType::Custom(
+                    "Redirect host should not have reached upstream_peer phase",
+                )));
+            }
+            ServerType::ProxyDirect {
                 addr,
                 scheme: Scheme::Http,
             } => Box::new(HttpPeer::new(addr, false, String::new())),
-            ProxyType::Proxy {
+            ServerType::ProxyDirect {
                 addr,
                 scheme: Scheme::Https { sni },
             } => Box::new(HttpPeer::new(addr, true, sni.to_string())),
-            ProxyType::LoadBalancer { upstream, .. } => {
-                let backend = upstream
-                    .select(b"", 256) // hash doesn't matter
-                    .unwrap();
+            ServerType::ProxyLoadBalanced { upstream, .. } => {
+                let backend = upstream.select(b"", 256).unwrap();
                 tracing::info!("upstream peer is: {:?}", backend);
-
                 backend_http_peer(host.as_ref(), backend)
             }
         };
@@ -194,7 +233,7 @@ pub fn run(config: lib_proxy_config::Config) -> config::Result<()> {
     let mut my_server = Server::new(None).unwrap();
     my_server.bootstrap();
 
-    let mut lb = http_proxy_service(&my_server.configuration, http_server.host_to_proxy_type);
+    let mut lb = http_proxy_service(&my_server.configuration, http_server.host_to_server_type);
 
     for port in http_server.ports {
         let addr = format!("0.0.0.0:{}", port);
@@ -203,7 +242,7 @@ pub fn run(config: lib_proxy_config::Config) -> config::Result<()> {
     }
     my_server.add_service(lb);
 
-    let mut lb = http_proxy_service(&my_server.configuration, https_server.host_to_proxy_type);
+    let mut lb = http_proxy_service(&my_server.configuration, https_server.host_to_server_type);
 
     for port in https_server.ports {
         let addr = format!("0.0.0.0:{}", port);
@@ -213,6 +252,8 @@ pub fn run(config: lib_proxy_config::Config) -> config::Result<()> {
             https_server.host_to_certs.clone(),
         ))
         .expect("Unable to build TlsSettings");
+
+        // TODO: Http2 is enabled for all routes
         tls_settings.enable_h2();
 
         lb.add_tls_with_settings(&addr, None, tls_settings);

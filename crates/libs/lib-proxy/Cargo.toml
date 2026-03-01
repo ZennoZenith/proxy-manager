@@ -13,6 +13,7 @@ lib-proxy-config = { path = "../../libs/lib-proxy-config" }
 
 async-trait = "0.1"
 futures = "0.3"
+bytes = "1"
 pingora = { version = "0.7", features = ["cache", "lb", "openssl", "proxy"] }
 
 http = { workspace = true }
@@ -20,6 +21,7 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 

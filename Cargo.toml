@@ -35,9 +35,9 @@ chrono = "0.4"
 time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
 strum = "0.28"
 strum_macros = "0.28"
+url = { version = "2", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "fast-rng"] }
 
-# url = { version = "2", features = ["serde"] }
 # axum = { version = "0.8", features = ["macros", "ws"] }
 # sqlx = { version = "0.8", features = [
 #   "macros",
