@@ -10,9 +10,10 @@ doctest = false
 workspace = true
 
 [dependencies]
-thiserror = { workspace = true }
+toml = "1.0"
+
 serde = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
+thiserror = { workspace = true }
 url = { workspace = true }
-toml = "1.0"

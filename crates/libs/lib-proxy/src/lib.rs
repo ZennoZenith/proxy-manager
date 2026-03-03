@@ -15,7 +15,8 @@ use pingora::{
 };
 
 use crate::config::{
-    HostsToServerType, HostsToSslCert, Scheme, ServerType, SslCert, pingora_servers_from_config,
+    Content, HostsToServerType, HostsToSslCert, Scheme, ServerType, SslCert,
+    pingora_servers_from_config,
 };
 
 fn backend_http_peer(server_name: &str, backend: Backend) -> Box<HttpPeer> {
@@ -75,11 +76,11 @@ impl ProxyHttp for HostsToServerType {
             .find(|v| v.0.iter().any(|t| t.as_ref() == host))
             .map(|v| &v.1);
 
-        if let Some(ServerType::Redirect {
+        if let Some(ServerType::Redirect(lib_proxy_config::Redirect {
             http_code,
             preserve_path,
             location,
-        }) = server_type
+        })) = server_type
         {
             let mut final_location = location.as_str().to_owned();
 
@@ -97,16 +98,33 @@ impl ProxyHttp for HostsToServerType {
             return Ok(true);
         };
 
-        if host == "test.zennozenith.com" {
-            let body = "Hello from Pingora!";
-            let mut resp = ResponseHeader::build(200, None)?;
-            resp.insert_header("Content-Type", "text/plain")?;
-            resp.insert_header("Content-Length", body.len().to_string())?;
+        if let Some(ServerType::Custom {
+            http_code,
+            content,
+            headers,
+        }) = server_type
+        {
+            let body: Option<bytes::Bytes> = content.clone().and_then(|c| match c {
+                Content::Bytes(b) => Some(bytes::Bytes::from(b)),
+                Content::Path { path, .. } => std::fs::read(&path)
+                    .inspect_err(|e| tracing::warn!("{:?}: {:?}", path, e))
+                    .ok()
+                    .map(bytes::Bytes::from),
+            });
 
+            let mut resp = ResponseHeader::build(*http_code, None)?;
+
+            if let Some(b) = &body {
+                resp.insert_header("Content-Length", b.len().to_string())?;
+            }
+
+            if let Some(header_map) = headers {
+                for (key, value) in header_map.clone().into_iter() {
+                    resp.insert_header(key, value)?
+                }
+            }
             session.write_response_header(Box::new(resp), false).await?;
-            session
-                .write_response_body(Some(bytes::Bytes::from(body)), true)
-                .await?;
+            session.write_response_body(body, true).await?;
             return Ok(true);
         }
 
@@ -142,6 +160,12 @@ impl ProxyHttp for HostsToServerType {
         };
 
         let mut peer = match server_type {
+            ServerType::Custom { .. } => {
+                tracing::error!("Custom host should not have reached upstream_peer phase");
+                return Err(pingora::Error::new(pingora::ErrorType::Custom(
+                    "Custom host should not have reached upstream_peer phase",
+                )));
+            }
             ServerType::Redirect { .. } => {
                 tracing::error!("Redirect host should not have reached upstream_peer phase");
                 return Err(pingora::Error::new(pingora::ErrorType::Custom(

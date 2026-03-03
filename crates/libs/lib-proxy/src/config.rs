@@ -1,19 +1,18 @@
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     net::SocketAddr,
     ops::{Deref, DerefMut},
     path::PathBuf,
     sync::Arc,
 };
 
-use lib_proxy_config::{Http, Https, RedirectHttpCode};
+use lib_proxy_config::{Http, Https};
 use pingora::{
     lb::{Backend, Backends, LoadBalancer},
     prelude::{RoundRobin, background_service},
     services::background::GenBackgroundService,
     tls::{pkey, x509::X509},
 };
-use url::Url;
 
 #[derive(Debug, thiserror::Error, strum_macros::Display)]
 pub enum Error {
@@ -81,12 +80,19 @@ pub(crate) struct SslCert {
 }
 
 #[derive(Clone, Debug)]
+pub(crate) enum Content {
+    Bytes(Box<[u8]>),
+    Path { path: PathBuf },
+}
+
+#[derive(Clone, Debug)]
 pub(crate) enum ServerType {
-    Redirect {
-        http_code: RedirectHttpCode,
-        preserve_path: bool,
-        location: Url,
+    Custom {
+        http_code: u16,
+        content: Option<Content>,
+        headers: Option<HashMap<String, String>>,
     },
+    Redirect(lib_proxy_config::Redirect),
     ProxyDirect {
         addr: SocketAddr,
         scheme: Scheme,
@@ -186,7 +192,34 @@ pub(crate) fn pingora_servers_from_config(
             .map(|v| Box::from(v.clone()))
             .collect::<Arc<[Box<str>]>>();
 
-        let server_type = match server.typ {
+        let server_type = match server.kind {
+            lib_proxy_config::ServerType::Custom(lib_proxy_config::Custom {
+                http_code,
+                content,
+                headers,
+            }) => {
+                let content: Option<Content> = content.map(|c| match c {
+                    lib_proxy_config::Content::Text(b) => Content::Bytes(b.as_bytes().into()),
+                    lib_proxy_config::Content::Bytes(b) => Content::Bytes(b),
+                    lib_proxy_config::Content::Path { path, cache } => {
+                        if cache {
+                            // Read file into bytes, fallback to original path if read fails
+                            std::fs::read(&path)
+                                .map(|data| Content::Bytes(Box::from(data)))
+                                .inspect_err(|e| tracing::warn!("{:?}: {:?}", path, e))
+                                .unwrap_or(Content::Path { path })
+                        } else {
+                            Content::Path { path }
+                        }
+                    }
+                });
+
+                ServerType::Custom {
+                    http_code,
+                    content,
+                    headers,
+                }
+            }
             lib_proxy_config::ServerType::Proxy(proxy_type) => match proxy_type {
                 lib_proxy_config::ProxyType::Direct { scheme, address } => {
                     ServerType::ProxyDirect {
@@ -241,15 +274,7 @@ pub(crate) fn pingora_servers_from_config(
                     }
                 }
             },
-            lib_proxy_config::ServerType::Redirect(lib_proxy_config::Redirect {
-                http_code,
-                preserve_path,
-                location,
-            }) => ServerType::Redirect {
-                http_code,
-                preserve_path,
-                location,
-            },
+            lib_proxy_config::ServerType::Redirect(redirect) => ServerType::Redirect(redirect),
         };
 
         if listen_http.is_some() {

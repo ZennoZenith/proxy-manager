@@ -1,26 +1,47 @@
 [[server]]
 enable = true
-name = ["xyz.zennozenith.com"]
-type = "redirect"
-http_code = 307
-preserve_path = true
-# scheme.protocol = "http"
-location = "https://pqr.zennozenith.com"
+name = ["ccc.zennozenith.com"]
 
 [server.listen.http]
 port = [6188]
+
+[server.kind.custom]
+http_code = 200
+content = "Hello"
+# content = [72, 101, 108, 108, 111]  ## "Hello" as ASCII bytes
+headers = { "X-Test" = "TEST", "Content-Type" = "text/plain" }
+
+[[server]]
+enable = true
+name = ["bbb.zennozenith.com"]
+
+[server.listen.http]
+port = [6188]
+
+[server.kind.custom]
+http_code = 200
+headers = { "X-Test" = "TEST", "Content-Type" = "text/html" }
+
+[server.kind.custom.content]
+path = "./Hello"
+cache = true
+
+[[server]]
+enable = true
+name = ["xyz.zennozenith.com"]
+
+[server.listen.http]
+port = [6188]
+
+[server.kind.redirect]
+http_code = 307
+preserve_path = true
+location = "https://pqr.zennozenith.com"
 
 
 [[server]]
 enable = true
 name = ["pqr.zennozenith.com"]
-type = "proxy"
-mode = "direct"
-address = "127.0.0.1:4004"
-
-[server.scheme]
-protocol = "https"
-sni = "pqr.zennozenith.com" ## optional
 
 [server.listen.http]
 port = [6188]
@@ -31,31 +52,36 @@ http2 = true
 ssl_certificate = "examples/keys/pqr.zennozenith.com/server.crt"
 ssl_certificate_key = "examples/keys/pqr.zennozenith.com/key.pem"
 
+[server.kind.proxy.direct]
+address = "127.0.0.1:4004"
+scheme = { protocol = "https", sni = "pqr.zennozenith.com" }
+
 [[server]]
 enable = true
 name = ["abc.zennozenith.com", "aaa.zennozenith.com"]
-type = "proxy"
-mode = "loadbalanced"
-alg = "RoundRobin"
 
 [server.listen.http]
 port = [6188]
 
-[[server.backend]]
+[server.kind.proxy.loadbalanced]
+alg = "RoundRobin"
+
+
+[[server.kind.proxy.loadbalanced.backend]]
 scheme.protocol = "https"
 scheme.sni = "example.com"
 address = "127.0.0.1:4004"
 weight = 2
 
-[[server.backend]]
+[[server.kind.proxy.loadbalanced.backend]]
 scheme.protocol = "http"
 address = "127.0.0.1:4000"
 
-[[server.backend]]
+[[server.kind.proxy.loadbalanced.backend]]
 scheme.protocol = "http"
 address = "127.0.0.1:4001"
 
-[[server.backend]]
+[[server.kind.proxy.loadbalanced.backend]]
 scheme.protocol = "http"
 address = "127.0.0.1:4002"
 weight = 1

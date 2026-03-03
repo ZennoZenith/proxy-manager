@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     net::SocketAddr,
     num::NonZeroU16,
     path::{Path, PathBuf},
@@ -36,8 +36,8 @@ pub struct Server {
     pub enable: bool,
     pub name: HashSet<String>,
     pub listen: Listen,
-    #[serde(flatten, rename = "type")]
-    pub typ: ServerType,
+    // #[serde(flatten)]
+    pub kind: ServerType,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -61,10 +61,31 @@ pub struct Https {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum ServerType {
     Proxy(ProxyType),
     Redirect(Redirect),
+    Custom(Custom),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Custom {
+    pub http_code: u16,
+    pub content: Option<Content>,
+    pub headers: Option<HashMap<String, String>>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged, rename_all = "lowercase")]
+pub enum Content {
+    Text(String),
+    Bytes(Box<[u8]>),
+
+    Path {
+        path: PathBuf,
+        #[serde(default)]
+        cache: bool,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -72,12 +93,11 @@ pub struct Redirect {
     pub http_code: RedirectHttpCode,
     #[serde(default)]
     pub preserve_path: bool,
-    // pub scheme: Scheme,
     pub location: Url,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "mode", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum ProxyType {
     Direct {
         scheme: Scheme,
@@ -139,5 +159,6 @@ mod tests {
     fn valid_example_config() {
         let config = Config::load_from_toml_str(CONFIG_FIXTURE);
         assert!(config.is_ok(), "Config Error {config:?}");
+        // dbg!(config.unwrap());
     }
 }
