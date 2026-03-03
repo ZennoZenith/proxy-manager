@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>504 — Gateway Timeout</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;800&display=swap"
+      rel="stylesheet"
+    >
+    <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    :root {
+      --bg: #0a0c08;
+      --surface: #111508;
+      --border: #1e2810;
+      --accent: #a3e635;
+      --accent2: #4ade80;
+      --text: #d8f0c0;
+      --muted: #3a5020;
+      --warn: #facc15;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "DM Mono", monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(163, 230, 53, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(163, 230, 53, 0.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(100px);
+      pointer-events: none;
+      opacity: 0.15;
+    }
+    .orb-1 {
+      width: 450px;
+      height: 450px;
+      background: #365314;
+      top: -150px;
+      left: 50%;
+      transform: translateX(-50%);
+      animation: drift 14s ease-in-out infinite alternate;
+    }
+    .orb-2 {
+      width: 300px;
+      height: 300px;
+      background: var(--warn);
+      bottom: -80px;
+      right: -60px;
+      opacity: 0.08;
+      animation: drift 10s ease-in-out infinite alternate-reverse;
+    }
+    @keyframes drift {
+      from {
+        transform: translate(-50%, 0);
+      }
+      to {
+        transform: translate(-50%, 30px);
+      }
+    }
+
+    .container {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+      max-width: 680px;
+      padding: 2rem;
+      animation: fadeUp 0.7s ease both;
+    }
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .timeout-ring {
+      width: 90px;
+      height: 90px;
+      border: 2px solid var(--border);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1.5rem;
+      position: relative;
+    }
+    .timeout-ring::before {
+      content: "";
+      position: absolute;
+      inset: -2px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: var(--accent);
+      animation: spin 2s linear infinite;
+    }
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+    .timeout-ring-inner {
+      font-size: 2rem;
+    }
+
+    .code-badge {
+      display: inline-block;
+      font-family: "Syne", sans-serif;
+      font-size: clamp(5rem, 15vw, 9rem);
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.5rem;
+      position: relative;
+    }
+    .code-badge::after {
+      content: "504";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      filter: blur(20px);
+      opacity: 0.35;
+      z-index: -1;
+    }
+    .label {
+      font-family: "Syne", sans-serif;
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 0.6rem;
+    }
+    .subtitle {
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.7;
+      margin-bottom: 2rem;
+    }
+
+    .progress-wrap {
+      margin-bottom: 2rem;
+    }
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.65rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .progress-bar {
+      height: 4px;
+      background: var(--border);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      animation: fillbar 30s linear forwards;
+    }
+    @keyframes fillbar {
+      from {
+        width: 0;
+      }
+      to {
+        width: 100%;
+      }
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.2rem 1.4rem;
+      text-align: left;
+      margin-bottom: 2rem;
+      font-size: 0.78rem;
+    }
+    .ig-item {}
+    .ig-key {
+      font-size: 0.6rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 3px;
+    }
+    .ig-val {
+      color: var(--warn);
+      font-size: 0.82rem;
+    }
+    .ig-val.ok {
+      color: var(--accent2);
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-family: "DM Mono", monospace;
+      font-size: 0.75rem;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+      font-weight: 500;
+    }
+    .btn-primary:hover {
+      background: #c4f06a;
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border-color: var(--border);
+    }
+    .btn-ghost:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    </style>
+  </head>
+  <body>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="container">
+      <div class="timeout-ring"><span class="timeout-ring-inner">⏱</span></div>
+      <div class="code-badge">504</div>
+      <div class="label">Gateway Timeout</div>
+      <p class="subtitle">
+        The upstream server took too long to respond.<br>The proxy gave up
+        waiting after the configured timeout window.
+      </p>
+
+      <div class="progress-wrap">
+        <div class="progress-label">
+          <span>Request age</span><span id="elapsed">0s</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill"></div></div>
+      </div>
+
+      <div class="info-grid">
+        <div class="ig-item">
+          <div class="ig-key">Error</div>
+          <div class="ig-val">504 Gateway Timeout</div>
+        </div>
+        <div class="ig-item">
+          <div class="ig-key">Proxy Status</div>
+          <div class="ig-val ok">Healthy ✓</div>
+        </div>
+        <div class="ig-item">
+          <div class="ig-key">Path</div>
+          <div class="ig-val" id="req-path">—</div>
+        </div>
+        <div class="ig-item">
+          <div class="ig-key">Timestamp</div>
+          <div class="ig-val" id="ts">—</div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <a href="javascript:location.reload()" class="btn btn-primary"
+        >↺ &nbsp;Retry</a>
+        <a href="/" class="btn btn-ghost">← &nbsp;Return Home</a>
+      </div>
+    </div>
+    <script>
+    document.getElementById("ts").textContent = new Date().toISOString();
+    document.getElementById("req-path").textContent = window.location.pathname
+      || "/";
+    const start = Date.now();
+    setInterval(() => {
+      const s = Math.floor((Date.now() - start) / 1000);
+      document.getElementById("elapsed").textContent = s + "s";
+    }, 1000);
+    </script>
+  </body>
+</html>

@@ -5,12 +5,13 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use http::header::HOST;
 use pingora::{
+    Error, ErrorSource, ErrorType,
     http::{RequestHeader, ResponseHeader},
     lb::Backend,
     listeners::{self, TlsAccept},
     prelude::{HttpPeer, Server},
     protocols::tls::TlsRef,
-    proxy::{ProxyHttp, Session, http_proxy_service},
+    proxy::{FailToProxy, ProxyHttp, Session, http_proxy_service},
     tls::ssl,
 };
 
@@ -18,6 +19,69 @@ use crate::config::{
     Content, HostsToServerType, HostsToSslCert, Scheme, ServerType, SslCert,
     pingora_servers_from_config,
 };
+
+#[derive(Clone, Debug)]
+struct MyErr {
+    code: u16,
+    message: &'static str,
+}
+
+impl MyErr {
+    const fn new(code: u16, message: &'static str) -> Self {
+        Self { code, message }
+    }
+
+    const fn missing_host_http_1_1() -> Self {
+        Self::new(400, "text:Missing Host in HTTP/1.1")
+    }
+
+    const fn cannot_determine_host() -> Self {
+        Self::new(400, "text:Cannot determine host")
+    }
+
+    const fn no_host_in_upstream() -> Self {
+        Self::new(500, "text:No host in ctx in upstream_peer phase")
+    }
+
+    const fn no_upstream_peer() -> Self {
+        Self::new(404, "text:No upstream peer")
+    }
+
+    const fn custom_server_content_path_io_err() -> Self {
+        Self::new(502, "text:Custon server content path not readable")
+    }
+
+    const fn unreachable_upstream_peer_custom_server_type() -> Self {
+        Self::new(
+            500,
+            "text:Custom host should not have reached upstream_peer phase",
+        )
+    }
+
+    const fn unreachable_upstream_peer_redirect_server_type() -> Self {
+        Self::new(
+            500,
+            "text:Redirect host should not have reached upstream_peer phase",
+        )
+    }
+
+    const fn no_healthy_upstream_peer() -> Self {
+        Self::new(503, "text:No healthy upstream peer")
+    }
+
+    const fn unreachable_upstream_request_filter_host_not_found() -> Self {
+        Self::new(
+            400,
+            "text:Cannot determine host in upstream_request_filter phase",
+        )
+    }
+}
+
+impl From<MyErr> for Box<Error> {
+    fn from(value: MyErr) -> Self {
+        Error::new(ErrorType::new_code(value.message, value.code))
+    }
+}
 
 fn backend_http_peer(server_name: &str, backend: Backend) -> Box<HttpPeer> {
     let tls = backend
@@ -53,25 +117,32 @@ impl ProxyHttp for HostsToServerType {
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<bool> {
-        ctx.host = session
+        let header_host = session
             .get_header(HOST)
             .or_else(|| session.get_header(":authority"))
-            .and_then(|v| v.to_str().ok())
-            .or_else(|| session.req_header().uri.host())
-            .map(Arc::from);
+            .and_then(|v| v.to_str().ok());
 
-        let Some(host) = ctx.host.as_deref() else {
-            tracing::warn!("Unable to extract host header");
-            return Ok(true);
+        let uri_host = session.req_header().uri.host();
+
+        // reject missing Host in HTTP/1.1
+        if header_host.is_none() && !session.is_http2() {
+            return Err(MyErr::missing_host_http_1_1().into());
         };
 
-        session
-            .req_header_mut()
-            .insert_header("Host", host.to_string())
-            .unwrap();
+        ctx.host = match (header_host, uri_host) {
+            (Some(h), _) => Some(Arc::from(h)),
+            (None, Some(h)) => Some(Arc::from(h)), // optional fallback
+            (None, None) => None,
+        };
+
+        let Some(host) = ctx.host.as_deref() else {
+            return Err(MyErr::cannot_determine_host().into());
+        };
+
+        // Insert HOST header in [Self::upstream_request_filter]
 
         let server_type = self
-            .0
+            .map
             .iter()
             .find(|v| v.0.iter().any(|t| t.as_ref() == host))
             .map(|v| &v.1);
@@ -104,19 +175,19 @@ impl ProxyHttp for HostsToServerType {
             headers,
         }) = server_type
         {
-            let body: Option<bytes::Bytes> = content.clone().and_then(|c| match c {
-                Content::Bytes(b) => Some(bytes::Bytes::from(b)),
-                Content::Path { path, .. } => std::fs::read(&path)
-                    .inspect_err(|e| tracing::warn!("{:?}: {:?}", path, e))
-                    .ok()
-                    .map(bytes::Bytes::from),
-            });
+            let body: bytes::Bytes = content
+                .clone()
+                .and_then(|c| match c {
+                    Content::Bytes(b) => Some(bytes::Bytes::from(b)),
+                    Content::Path { path } => std::fs::read(&path)
+                        .inspect_err(|e| tracing::warn!("{:?}: {:?}", path, e))
+                        .ok()
+                        .map(bytes::Bytes::from),
+                })
+                .ok_or(MyErr::custom_server_content_path_io_err())?;
 
             let mut resp = ResponseHeader::build(*http_code, None)?;
-
-            if let Some(b) = &body {
-                resp.insert_header("Content-Length", b.len().to_string())?;
-            }
+            resp.insert_header("Content-Length", body.len().to_string())?;
 
             if let Some(header_map) = headers {
                 for (key, value) in header_map.clone().into_iter() {
@@ -124,7 +195,7 @@ impl ProxyHttp for HostsToServerType {
                 }
             }
             session.write_response_header(Box::new(resp), false).await?;
-            session.write_response_body(body, true).await?;
+            session.write_response_body(Some(body), true).await?;
             return Ok(true);
         }
 
@@ -137,40 +208,25 @@ impl ProxyHttp for HostsToServerType {
         ctx: &mut Self::CTX,
     ) -> pingora::Result<Box<HttpPeer>> {
         let Some(host) = ctx.host.clone() else {
-            return Err(pingora::Error::new(pingora::ErrorType::Custom(
-                "No host in ctx in upstream_peer phase",
-            )));
+            return Err(MyErr::no_host_in_upstream().into());
         };
 
         let server_type = self
-            .0
+            .map
             .iter()
             .find(|v| v.0.iter().any(|t| t.as_ref() == host.as_ref()))
             .map(|v| &v.1);
 
-        #[cfg(debug_assertions)]
-        if server_type.is_none() {
-            tracing::warn!("No upstream peer for host: {}", host);
-        }
-
         let Some(server_type) = server_type else {
-            return Err(pingora::Error::new(pingora::ErrorType::Custom(
-                "No proxy for give host",
-            )));
+            return Err(MyErr::no_upstream_peer().into());
         };
 
         let mut peer = match server_type {
             ServerType::Custom { .. } => {
-                tracing::error!("Custom host should not have reached upstream_peer phase");
-                return Err(pingora::Error::new(pingora::ErrorType::Custom(
-                    "Custom host should not have reached upstream_peer phase",
-                )));
+                return Err(MyErr::unreachable_upstream_peer_custom_server_type().into());
             }
             ServerType::Redirect { .. } => {
-                tracing::error!("Redirect host should not have reached upstream_peer phase");
-                return Err(pingora::Error::new(pingora::ErrorType::Custom(
-                    "Redirect host should not have reached upstream_peer phase",
-                )));
+                return Err(MyErr::unreachable_upstream_peer_redirect_server_type().into());
             }
             ServerType::ProxyDirect {
                 addr,
@@ -181,8 +237,13 @@ impl ProxyHttp for HostsToServerType {
                 scheme: Scheme::Https { sni },
             } => Box::new(HttpPeer::new(addr, true, sni.to_string())),
             ServerType::ProxyLoadBalanced { upstream, .. } => {
-                let backend = upstream.select(b"", 256).unwrap();
+                let backend = upstream
+                    .select(b"", 256)
+                    .ok_or(MyErr::no_healthy_upstream_peer())?;
+
+                #[cfg(debug_assertions)]
                 tracing::info!("upstream peer is: {:?}", backend);
+
                 backend_http_peer(host.as_ref(), backend)
             }
         };
@@ -202,14 +263,127 @@ impl ProxyHttp for HostsToServerType {
         upstream_request: &mut RequestHeader,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<()> {
-        upstream_request
-            .insert_header(
-                "Host",
-                ctx.host.clone().map(|v| v.to_string()).unwrap_or_default(),
-            )
-            .unwrap();
+        let Some(host) = ctx.host.clone().map(|v| v.to_string()) else {
+            return Err(MyErr::unreachable_upstream_request_filter_host_not_found().into());
+        };
 
-        Ok(())
+        upstream_request.insert_header("Host", host)
+    }
+
+    async fn logging(&self, _session: &mut Session, _e: Option<&Error>, _ctx: &mut Self::CTX)
+    where
+        Self::CTX: Send + Sync,
+    {
+    }
+
+    fn suppress_error_log(&self, _session: &Session, _ctx: &Self::CTX, _error: &Error) -> bool {
+        false
+    }
+
+    fn error_while_proxy(
+        &self,
+        peer: &HttpPeer,
+        session: &mut Session,
+        e: Box<Error>,
+        _ctx: &mut Self::CTX,
+        client_reused: bool,
+    ) -> Box<Error> {
+        let mut e = e.more_context(format!("Peer: {}", peer));
+        // only reused client connections where retry buffer is not truncated
+        e.retry
+            .decide_reuse(client_reused && !session.as_ref().retry_buffer_truncated());
+        e
+    }
+
+    fn fail_to_connect(
+        &self,
+        _session: &mut Session,
+        _peer: &HttpPeer,
+        _ctx: &mut Self::CTX,
+        e: Box<Error>,
+    ) -> Box<Error> {
+        e
+    }
+
+    async fn fail_to_proxy(
+        &self,
+        session: &mut Session,
+        e: &Error,
+        _ctx: &mut Self::CTX,
+    ) -> FailToProxy
+    where
+        Self::CTX: Send + Sync,
+    {
+        // #[cfg(debug_assertions)]
+        // dbg!(&e);
+
+        let (code, message): (u16, &'static str) = match e.etype() {
+            ErrorType::HTTPStatus(code) => (*code, ""),
+            ErrorType::CustomCode(message, code) => (*code, message),
+            _ => {
+                match e.esource() {
+                    ErrorSource::Upstream => (502, ""),
+                    ErrorSource::Downstream => {
+                        match e.etype() {
+                            ErrorType::WriteError
+                            | ErrorType::ReadError
+                            | ErrorType::ConnectionClosed => {
+                                /* conn already dead */
+                                (0, "")
+                            }
+                            _ => (400, ""),
+                        }
+                    }
+                    ErrorSource::Internal | ErrorSource::Unset => (500, ""),
+                }
+            }
+        };
+
+        if code > 0 {
+            let _body = bytes::Bytes::from(message);
+            let body = match code {
+                400 => bytes::Bytes::from(self.error_pages.page_400.to_vec()),
+                403 => bytes::Bytes::from(self.error_pages.page_403.to_vec()),
+                404 => bytes::Bytes::from(self.error_pages.page_404.to_vec()),
+                500 => bytes::Bytes::from(self.error_pages.page_500.to_vec()),
+                502 => bytes::Bytes::from(self.error_pages.page_502.to_vec()),
+                503 => bytes::Bytes::from(self.error_pages.page_503.to_vec()),
+                504 => bytes::Bytes::from(self.error_pages.page_504.to_vec()),
+                _ => bytes::Bytes::from(self.error_pages.page_500.to_vec()),
+            };
+
+            if let Ok(mut resp) = ResponseHeader::build(code, None) {
+                resp.insert_header("Content-Length", body.len().to_string())
+                    .unwrap_or_else(|e| {
+                        tracing::error!("failed to set header response to downstream: {e}");
+                    });
+                resp.insert_header("Content-Type", "text/html")
+                    .unwrap_or_else(|e| {
+                        tracing::error!("failed to set header response to downstream: {e}");
+                    });
+
+                session
+                    .write_error_response(resp, body)
+                    .await
+                    .unwrap_or_else(|e| {
+                        tracing::error!("failed to send error response to downstream: {e}");
+                    });
+            } else {
+                session.respond_error(code).await.unwrap_or_else(|e| {
+                    tracing::error!("failed to send error response to downstream: {e}");
+                });
+            };
+        }
+
+        FailToProxy {
+            error_code: code,
+            // default to no reuse, which is safest
+            can_reuse_downstream: false,
+        }
+    }
+
+    fn request_summary(&self, session: &Session, _ctx: &Self::CTX) -> String {
+        session.as_ref().request_summary()
     }
 }
 

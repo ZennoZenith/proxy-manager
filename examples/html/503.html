@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>503 — Service Unavailable</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;800&display=swap"
+      rel="stylesheet"
+    >
+    <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    :root {
+      --bg: #0c0a06;
+      --surface: #181206;
+      --border: #2a2010;
+      --accent: #fb923c;
+      --accent2: #f59e0b;
+      --text: #f0dfc0;
+      --muted: #604020;
+      --warn: #fbbf24;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "DM Mono", monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(251, 146, 60, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(251, 146, 60, 0.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(100px);
+      pointer-events: none;
+      opacity: 0.15;
+    }
+    .orb-1 {
+      width: 450px;
+      height: 450px;
+      background: #7c2d12;
+      top: -150px;
+      right: -60px;
+      animation: drift 12s ease-in-out infinite alternate;
+    }
+    .orb-2 {
+      width: 300px;
+      height: 300px;
+      background: var(--accent2);
+      bottom: -80px;
+      left: -40px;
+      animation: drift 9s ease-in-out infinite alternate-reverse;
+    }
+    @keyframes drift {
+      from {
+        transform: translate(0, 0);
+      }
+      to {
+        transform: translate(25px, 35px);
+      }
+    }
+
+    .container {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+      max-width: 680px;
+      padding: 2rem;
+      animation: fadeUp 0.7s ease both;
+    }
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .warning-banner {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(251, 146, 60, 0.08);
+      border: 1px solid rgba(251, 146, 60, 0.2);
+      border-radius: 100px;
+      padding: 6px 16px;
+      font-size: 0.7rem;
+      color: var(--warn);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 2rem;
+      animation: borderPulse 2s ease-in-out infinite;
+    }
+    @keyframes borderPulse {
+      0%, 100% {
+        border-color: rgba(251, 146, 60, 0.2);
+      }
+      50% {
+        border-color: rgba(251, 146, 60, 0.5);
+      }
+    }
+    .warn-icon {
+      font-size: 0.9rem;
+    }
+
+    .code-badge {
+      display: inline-block;
+      font-family: "Syne", sans-serif;
+      font-size: clamp(5rem, 15vw, 9rem);
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.5rem;
+      position: relative;
+    }
+    .code-badge::after {
+      content: "503";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      filter: blur(20px);
+      opacity: 0.35;
+      z-index: -1;
+    }
+    .label {
+      font-family: "Syne", sans-serif;
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 0.6rem;
+    }
+    .subtitle {
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.7;
+      margin-bottom: 2rem;
+    }
+
+    .retry-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.4rem;
+      margin-bottom: 2rem;
+    }
+    .retry-label {
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+      margin-bottom: 0.8rem;
+    }
+    .retry-counter {
+      font-family: "Syne", sans-serif;
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: var(--warn);
+      margin-bottom: 0.4rem;
+    }
+    .retry-sub {
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+
+    .reasons {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 2rem;
+      text-align: left;
+    }
+    .reason {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.75rem;
+    }
+    .reason-icon {
+      font-size: 0.9rem;
+    }
+    .reason-text {
+      color: var(--text);
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-family: "DM Mono", monospace;
+      font-size: 0.75rem;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+      font-weight: 500;
+    }
+    .btn-primary:hover {
+      background: #fca464;
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border-color: var(--border);
+    }
+    .btn-ghost:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    </style>
+  </head>
+  <body>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="container">
+      <div class="warning-banner">
+        <span class="warn-icon">⚠</span>Service Degraded
+      </div>
+      <div class="code-badge">503</div>
+      <div class="label">Service Unavailable</div>
+      <p class="subtitle">
+        All upstream servers are currently unavailable or overloaded.<br>The
+        proxy cannot route your request right now.
+      </p>
+
+      <div class="retry-card">
+        <div class="retry-label">Auto-retry in</div>
+        <div class="retry-counter" id="countdown">30</div>
+        <div class="retry-sub">
+          seconds &nbsp;·&nbsp; or retry manually below
+        </div>
+      </div>
+
+      <div class="reasons">
+        <div class="reason">
+          <span class="reason-icon">🔴</span><span class="reason-text"
+          >All upstream backends are offline or refusing connections</span>
+        </div>
+        <div class="reason">
+          <span class="reason-icon">🌡️</span><span class="reason-text"
+          >Server may be under heavy load or starting up</span>
+        </div>
+        <div class="reason">
+          <span class="reason-icon">🔧</span><span class="reason-text"
+          >Scheduled maintenance may be in progress</span>
+        </div>
+      </div>
+
+      <div class="actions">
+        <a
+          href="javascript:location.reload()"
+          class="btn btn-primary"
+          id="retry-btn"
+        >↺ &nbsp;Retry Now</a>
+        <a href="/" class="btn btn-ghost">← &nbsp;Return Home</a>
+      </div>
+    </div>
+    <script>
+    let count = 30;
+    const el = document.getElementById("countdown");
+    const interval = setInterval(() => {
+      count--;
+      el.textContent = count;
+      if (count <= 0) {
+        clearInterval(interval);
+        location.reload();
+      }
+    }, 1000);
+    </script>
+  </body>
+</html>

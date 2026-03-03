@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>502 — Bad Gateway</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;800&display=swap"
+      rel="stylesheet"
+    >
+    <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    :root {
+      --bg: #0c0a08;
+      --surface: #150f0a;
+      --border: #2a1a10;
+      --accent: #ff6b35;
+      --accent2: #ff3a6e;
+      --text: #f0d8c8;
+      --muted: #60402a;
+      --err: #ff6b35;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "DM Mono", monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255, 107, 53, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 107, 53, 0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(100px);
+      pointer-events: none;
+      opacity: 0.15;
+    }
+    .orb-1 {
+      width: 500px;
+      height: 500px;
+      background: var(--accent);
+      top: -200px;
+      left: -100px;
+      animation: drift 10s ease-in-out infinite alternate;
+    }
+    .orb-2 {
+      width: 350px;
+      height: 350px;
+      background: var(--accent2);
+      bottom: -100px;
+      right: -80px;
+      animation: drift 13s ease-in-out infinite alternate-reverse;
+    }
+    @keyframes drift {
+      from {
+        transform: translate(0, 0);
+      }
+      to {
+        transform: translate(40px, 30px);
+      }
+    }
+
+    .container {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+      max-width: 680px;
+      padding: 2rem;
+      animation: fadeUp 0.7s ease both;
+    }
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .code-badge {
+      display: inline-block;
+      font-family: "Syne", sans-serif;
+      font-size: clamp(5rem, 15vw, 9rem);
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.5rem;
+      position: relative;
+    }
+    .code-badge::after {
+      content: "502";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      filter: blur(20px);
+      opacity: 0.4;
+      z-index: -1;
+    }
+
+    .label {
+      font-family: "Syne", sans-serif;
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 0.6rem;
+      letter-spacing: -0.01em;
+    }
+    .subtitle {
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.7;
+      margin-bottom: 2.5rem;
+    }
+
+    .terminal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.2rem 1.4rem;
+      text-align: left;
+      margin-bottom: 2rem;
+      font-size: 0.78rem;
+      line-height: 1.8;
+    }
+    .terminal-bar {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 1rem;
+      align-items: center;
+    }
+    .tbar-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .tbar-dot:nth-child(1) {
+      background: #ff5f57;
+    }
+    .tbar-dot:nth-child(2) {
+      background: #febc2e;
+    }
+    .tbar-dot:nth-child(3) {
+      background: #28c840;
+    }
+    .t-label {
+      color: var(--muted);
+      margin-left: auto;
+      font-size: 0.6rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .t-line {
+      display: flex;
+      gap: 12px;
+    }
+    .t-key {
+      color: var(--muted);
+      min-width: 120px;
+      flex-shrink: 0;
+    }
+    .t-val {
+      color: var(--err);
+    }
+    .t-val.ok {
+      color: #60c0a0;
+    }
+    .t-val.warn {
+      color: #f0a030;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-family: "DM Mono", monospace;
+      font-size: 0.75rem;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+      font-weight: 500;
+    }
+    .btn-primary:hover {
+      background: #ff8c55;
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border-color: var(--border);
+    }
+    .btn-ghost:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .blink {
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink {
+      0%, 100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0;
+      }
+    }
+    </style>
+  </head>
+  <body>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="container">
+      <div class="code-badge">502</div>
+      <div class="label">Bad Gateway</div>
+      <p class="subtitle">
+        The upstream server is unreachable or returned an invalid
+        response.<br>The proxy received no valid reply from the backend.
+      </p>
+
+      <div class="terminal">
+        <div class="terminal-bar">
+          <div class="tbar-dot"></div>
+          <div class="tbar-dot"></div>
+          <div class="tbar-dot"></div>
+          <span class="t-label">Proxy Diagnostics</span>
+        </div>
+        <div class="t-line">
+          <span class="t-key">error_code</span><span class="t-val"
+          >502 Bad Gateway</span>
+        </div>
+        <div class="t-line">
+          <span class="t-key">upstream</span><span class="t-val" id="upstream"
+          >—</span>
+        </div>
+        <div class="t-line">
+          <span class="t-key">reason</span><span class="t-val"
+          >Connection refused / No response</span>
+        </div>
+        <div class="t-line">
+          <span class="t-key">proxy_status</span><span class="t-val ok"
+          >Running ✓</span>
+        </div>
+        <div class="t-line">
+          <span class="t-key">timestamp</span><span class="t-val warn" id="ts"
+          >—</span>
+        </div>
+        <div class="t-line">
+          <span class="t-key">action</span><span class="t-val">Check upstream
+            &amp; retry<span class="blink">_</span></span>
+        </div>
+      </div>
+
+      <div class="actions">
+        <a href="javascript:location.reload()" class="btn btn-primary"
+        >↺ &nbsp;Retry Request</a>
+        <a href="/" class="btn btn-ghost">← &nbsp;Return Home</a>
+      </div>
+    </div>
+    <script>
+    const now = new Date();
+    document.getElementById("ts").textContent = now.toISOString();
+    document.getElementById("upstream").textContent = window.location.hostname
+      || "upstream-host";
+    </script>
+  </body>
+</html>

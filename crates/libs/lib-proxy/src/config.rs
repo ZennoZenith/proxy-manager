@@ -29,6 +29,74 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 pub type BgService = GenBackgroundService<LoadBalancer<RoundRobin>>;
 
+fn read_file_as_byte(path: Option<PathBuf>) -> Option<Arc<[u8]>> {
+    path.and_then(|p| {
+        std::fs::read(p.clone())
+            .inspect_err(|e| tracing::warn!("Cannot read {:?}, Cause: {}", p, e))
+            .ok()
+    })
+    .map(Arc::from)
+}
+
+#[derive(Clone, Debug)]
+pub struct ErrorPages {
+    pub(crate) page_default: Arc<[u8]>,
+    pub(crate) page_400: Arc<[u8]>,
+    pub(crate) page_403: Arc<[u8]>,
+    pub(crate) page_404: Arc<[u8]>,
+    pub(crate) page_500: Arc<[u8]>,
+    pub(crate) page_502: Arc<[u8]>,
+    pub(crate) page_503: Arc<[u8]>,
+    pub(crate) page_504: Arc<[u8]>,
+}
+
+impl Default for ErrorPages {
+    fn default() -> Self {
+        let page_default = include_bytes!("../../../../examples/html/default.html")
+            .to_vec()
+            .into();
+
+        let page_400 = include_bytes!("../../../../examples/html/400.html")
+            .to_vec()
+            .into();
+
+        let page_403 = include_bytes!("../../../../examples/html/403.html")
+            .to_vec()
+            .into();
+
+        let page_404 = include_bytes!("../../../../examples/html/404.html")
+            .to_vec()
+            .into();
+
+        let page_500 = include_bytes!("../../../../examples/html/500.html")
+            .to_vec()
+            .into();
+
+        let page_502 = include_bytes!("../../../../examples/html/502.html")
+            .to_vec()
+            .into();
+
+        let page_503 = include_bytes!("../../../../examples/html/503.html")
+            .to_vec()
+            .into();
+
+        let page_504 = include_bytes!("../../../../examples/html/504.html")
+            .to_vec()
+            .into();
+
+        Self {
+            page_default,
+            page_400,
+            page_403,
+            page_404,
+            page_500,
+            page_502,
+            page_503,
+            page_504,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) enum Scheme {
     Http,
@@ -54,7 +122,10 @@ impl Scheme {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct HostsToServerType(pub(crate) Vec<(Arc<[Box<str>]>, ServerType)>);
+pub(crate) struct HostsToServerType {
+    pub(crate) map: Vec<(Arc<[Box<str>]>, ServerType)>,
+    pub(crate) error_pages: ErrorPages,
+}
 
 #[derive(Clone, Debug)]
 pub(crate) struct HostsToSslCert(pub(crate) Vec<(Arc<[Box<str>]>, SslCert)>);
@@ -131,6 +202,34 @@ impl DerefMut for Upstream {
 pub(crate) fn pingora_servers_from_config(
     config: lib_proxy_config::Config,
 ) -> Result<(PingoraHttpServer, PingoraHttpsServer, Vec<BgService>)> {
+    let error_pages = config
+        .error_page
+        .map(|pages| {
+            let e_pages = ErrorPages::default();
+
+            let page_default =
+                read_file_as_byte(pages.page_default).unwrap_or(e_pages.page_default);
+            let page_400 = read_file_as_byte(pages.page_400).unwrap_or(e_pages.page_400);
+            let page_403 = read_file_as_byte(pages.page_403).unwrap_or(e_pages.page_403);
+            let page_404 = read_file_as_byte(pages.page_404).unwrap_or(e_pages.page_404);
+            let page_500 = read_file_as_byte(pages.page_500).unwrap_or(e_pages.page_500);
+            let page_502 = read_file_as_byte(pages.page_502).unwrap_or(e_pages.page_502);
+            let page_503 = read_file_as_byte(pages.page_503).unwrap_or(e_pages.page_503);
+            let page_504 = read_file_as_byte(pages.page_504).unwrap_or(e_pages.page_504);
+
+            ErrorPages {
+                page_default,
+                page_400,
+                page_403,
+                page_404,
+                page_500,
+                page_502,
+                page_503,
+                page_504,
+            }
+        })
+        .unwrap_or_default();
+
     let http_ports: Vec<u16> = config
         .server
         .iter()
@@ -317,13 +416,19 @@ pub(crate) fn pingora_servers_from_config(
 
     let pingora_http_server = PingoraHttpServer {
         ports: http_ports.into(),
-        host_to_server_type: HostsToServerType(http_host_to_server_type),
+        host_to_server_type: HostsToServerType {
+            map: http_host_to_server_type,
+            error_pages: error_pages.clone(),
+        },
     };
 
     let pingora_https_server = PingoraHttpsServer {
         _http2: http2,
         ports: https_ports.into(),
-        host_to_server_type: HostsToServerType(https_host_to_server_type),
+        host_to_server_type: HostsToServerType {
+            map: https_host_to_server_type,
+            error_pages,
+        },
         host_to_certs: HostsToSslCert(host_to_certs),
     };
 

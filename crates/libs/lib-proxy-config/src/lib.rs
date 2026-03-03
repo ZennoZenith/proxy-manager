@@ -23,7 +23,28 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
+    pub error_page: Option<ErrorPages>,
     pub server: Vec<Server>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ErrorPages {
+    #[serde(rename = "default")]
+    pub page_default: Option<PathBuf>,
+    #[serde(rename = "400")]
+    pub page_400: Option<PathBuf>,
+    #[serde(rename = "403")]
+    pub page_403: Option<PathBuf>,
+    #[serde(rename = "404")]
+    pub page_404: Option<PathBuf>,
+    #[serde(rename = "500")]
+    pub page_500: Option<PathBuf>,
+    #[serde(rename = "502")]
+    pub page_502: Option<PathBuf>,
+    #[serde(rename = "503")]
+    pub page_503: Option<PathBuf>,
+    #[serde(rename = "504")]
+    pub page_504: Option<PathBuf>,
 }
 
 fn default_true() -> bool {

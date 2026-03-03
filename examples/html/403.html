@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>403 — Forbidden</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;800&display=swap"
+      rel="stylesheet"
+    >
+    <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    :root {
+      --bg: #0a080a;
+      --surface: #120a12;
+      --border: #200a20;
+      --accent: #f472b6;
+      --accent2: #ec4899;
+      --text: #f0c8e8;
+      --muted: #502040;
+      --danger: #f472b6;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "DM Mono", monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(244, 114, 182, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(244, 114, 182, 0.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(100px);
+      pointer-events: none;
+      opacity: 0.15;
+    }
+    .orb-1 {
+      width: 450px;
+      height: 450px;
+      background: #831843;
+      top: -150px;
+      right: -60px;
+      animation: drift 11s ease-in-out infinite alternate;
+    }
+    .orb-2 {
+      width: 300px;
+      height: 300px;
+      background: #4a044e;
+      bottom: -80px;
+      left: -40px;
+      animation: drift 14s ease-in-out infinite alternate-reverse;
+    }
+    @keyframes drift {
+      from {
+        transform: translate(0, 0);
+      }
+      to {
+        transform: translate(30px, 25px);
+      }
+    }
+
+    .container {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+      max-width: 680px;
+      padding: 2rem;
+      animation: fadeUp 0.7s ease both;
+    }
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .lock-icon {
+      font-size: 3rem;
+      display: block;
+      margin-bottom: 1rem;
+      filter: drop-shadow(0 0 20px rgba(244, 114, 182, 0.5));
+    }
+
+    .code-badge {
+      display: inline-block;
+      font-family: "Syne", sans-serif;
+      font-size: clamp(5rem, 15vw, 9rem);
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.5rem;
+      position: relative;
+    }
+    .code-badge::after {
+      content: "403";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      filter: blur(20px);
+      opacity: 0.35;
+      z-index: -1;
+    }
+    .label {
+      font-family: "Syne", sans-serif;
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 0.6rem;
+    }
+    .subtitle {
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.7;
+      margin-bottom: 2rem;
+    }
+
+    .access-log {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.2rem 1.4rem;
+      text-align: left;
+      margin-bottom: 2rem;
+      font-size: 0.78rem;
+      line-height: 1.8;
+    }
+    .al-header {
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+      margin-bottom: 0.8rem;
+      display: flex;
+      justify-content: space-between;
+    }
+    .al-denied {
+      color: #e05070;
+      font-size: 0.65rem;
+    }
+    .al-row {
+      display: flex;
+      gap: 12px;
+    }
+    .al-key {
+      color: var(--muted);
+      min-width: 130px;
+      flex-shrink: 0;
+    }
+    .al-val {
+      color: var(--danger);
+    }
+    .al-val.neutral {
+      color: #c080a0;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-family: "DM Mono", monospace;
+      font-size: 0.75rem;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+      font-weight: 500;
+    }
+    .btn-primary:hover {
+      background: #f9a8d4;
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border-color: var(--border);
+    }
+    .btn-ghost:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    </style>
+  </head>
+  <body>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="container">
+      <span class="lock-icon">🔒</span>
+      <div class="code-badge">403</div>
+      <div class="label">Access Forbidden</div>
+      <p class="subtitle">
+        The proxy denied your request due to an access control rule.<br>You do
+        not have permission to access this resource.
+      </p>
+
+      <div class="access-log">
+        <div class="al-header">
+          <span>Access Denial Log</span><span class="al-denied"
+          >● ACCESS DENIED</span>
+        </div>
+        <div class="al-row">
+          <span class="al-key">error_code</span><span class="al-val"
+          >403 Forbidden</span>
+        </div>
+        <div class="al-row">
+          <span class="al-key">rule_matched</span><span class="al-val"
+          >ACL / IP block / Auth required</span>
+        </div>
+        <div class="al-row">
+          <span class="al-key">path</span><span
+            class="al-val neutral"
+            id="req-path"
+          >—</span>
+        </div>
+        <div class="al-row">
+          <span class="al-key">client_ip</span><span class="al-val neutral"
+          >Redacted</span>
+        </div>
+        <div class="al-row">
+          <span class="al-key">timestamp</span><span
+            class="al-val neutral"
+            id="ts"
+          >—</span>
+        </div>
+      </div>
+
+      <div class="actions">
+        <a href="/" class="btn btn-primary">← &nbsp;Return Home</a>
+        <a href="javascript:history.back()" class="btn btn-ghost"
+        >↩ &nbsp;Go Back</a>
+      </div>
+    </div>
+    <script>
+    document.getElementById("ts").textContent = new Date().toISOString();
+    document.getElementById("req-path").textContent = window.location.pathname
+      || "/";
+    </script>
+  </body>
+</html>

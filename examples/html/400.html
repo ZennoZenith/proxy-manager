@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>400 — Bad Request</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;800&display=swap"
+      rel="stylesheet"
+    >
+    <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    :root {
+      --bg: #08090c;
+      --surface: #0e1018;
+      --border: #181e2c;
+      --accent: #818cf8;
+      --accent2: #6366f1;
+      --text: #d0d4f0;
+      --muted: #333860;
+      --info: #818cf8;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "DM Mono", monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(129, 140, 248, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(129, 140, 248, 0.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(100px);
+      pointer-events: none;
+      opacity: 0.15;
+    }
+    .orb-1 {
+      width: 420px;
+      height: 420px;
+      background: var(--accent2);
+      top: -140px;
+      left: -60px;
+      animation: drift 13s ease-in-out infinite alternate;
+    }
+    .orb-2 {
+      width: 320px;
+      height: 320px;
+      background: #1e1b4b;
+      bottom: -80px;
+      right: -50px;
+      animation: drift 10s ease-in-out infinite alternate-reverse;
+    }
+    @keyframes drift {
+      from {
+        transform: translate(0, 0);
+      }
+      to {
+        transform: translate(30px, 30px);
+      }
+    }
+
+    .container {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+      max-width: 700px;
+      padding: 2rem;
+      animation: fadeUp 0.7s ease both;
+    }
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .icon {
+      font-size: 2.8rem;
+      display: block;
+      margin-bottom: 1.2rem;
+    }
+
+    .code-badge {
+      display: inline-block;
+      font-family: "Syne", sans-serif;
+      font-size: clamp(5rem, 15vw, 9rem);
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.5rem;
+      position: relative;
+    }
+    .code-badge::after {
+      content: "400";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      filter: blur(22px);
+      opacity: 0.35;
+      z-index: -1;
+    }
+
+    .label {
+      font-family: "Syne", sans-serif;
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 0.6rem;
+    }
+    .subtitle {
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.7;
+      margin-bottom: 2rem;
+    }
+
+    /* Fake malformed request viewer */
+    .request-viewer {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 1.4rem;
+      text-align: left;
+    }
+    .rv-topbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 14px;
+    }
+    .rv-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+    }
+    .rv-dot:nth-child(1) {
+      background: #ff5f57;
+    }
+    .rv-dot:nth-child(2) {
+      background: #febc2e;
+    }
+    .rv-dot:nth-child(3) {
+      background: #28c840;
+    }
+    .rv-title {
+      margin-left: auto;
+      font-size: 0.6rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .rv-body {
+      padding: 1rem 1.4rem;
+      font-size: 0.76rem;
+      line-height: 2;
+    }
+    .rv-line {
+      display: flex;
+      gap: 0;
+      flex-wrap: wrap;
+    }
+    .tok-method {
+      color: #c084fc;
+      font-weight: 500;
+      margin-right: 8px;
+    }
+    .tok-path {
+      color: #818cf8;
+      margin-right: 8px;
+    }
+    .tok-proto {
+      color: #60a0c0;
+    }
+    .tok-header-key {
+      color: #64748b;
+      min-width: 160px;
+    }
+    .tok-header-val {
+      color: #94a3b8;
+    }
+    .tok-error {
+      color: #f87171;
+      background: rgba(248, 113, 113, 0.08);
+      border-radius: 4px;
+      padding: 0 4px;
+    }
+    .rv-divider {
+      border: none;
+      border-top: 1px dashed var(--border);
+      margin: 8px 0;
+    }
+
+    /* Issues list */
+    .issues {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.2rem 1.4rem;
+      text-align: left;
+      margin-bottom: 2rem;
+      font-size: 0.76rem;
+    }
+    .issues-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.8rem;
+    }
+    .issues-title {
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+    }
+    .issues-count {
+      background: rgba(248, 113, 113, 0.12);
+      border: 1px solid rgba(248, 113, 113, 0.2);
+      border-radius: 20px;
+      padding: 2px 10px;
+      font-size: 0.6rem;
+      color: #f87171;
+    }
+
+    .issue-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .issue-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .issue-bullet {
+      color: #f87171;
+      font-size: 0.8rem;
+      margin-top: 1px;
+      flex-shrink: 0;
+    }
+    .issue-text {
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .issue-code {
+      color: var(--info);
+      background: rgba(129, 140, 248, 0.08);
+      border-radius: 4px;
+      padding: 0 5px;
+      font-size: 0.72rem;
+    }
+
+    .meta-row {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 2rem;
+      font-size: 0.68rem;
+    }
+    .meta-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 12px;
+      color: var(--muted);
+    }
+    .meta-chip span {
+      color: var(--info);
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-family: "DM Mono", monospace;
+      font-size: 0.75rem;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+      font-weight: 500;
+    }
+    .btn-primary:hover {
+      background: #a5b4fc;
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text);
+      border-color: var(--border);
+    }
+    .btn-ghost:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    </style>
+  </head>
+  <body>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="container">
+      <span class="icon">⚠️</span>
+      <div class="code-badge">400</div>
+      <div class="label">Bad Request</div>
+      <p class="subtitle">
+        The proxy received a request it could not understand.<br>The request is
+        malformed, missing required headers, or contains invalid syntax.
+      </p>
+
+      <!-- Fake malformed request display -->
+      <div class="request-viewer">
+        <div class="rv-topbar">
+          <div class="rv-dot"></div>
+          <div class="rv-dot"></div>
+          <div class="rv-dot"></div>
+          <span class="rv-title">Incoming Request (parsed)</span>
+        </div>
+        <div class="rv-body">
+          <div class="rv-line">
+            <span class="tok-method" id="req-method">GET</span>
+            <span class="tok-path" id="req-path">/</span>
+            <span class="tok-proto">HTTP/1.1</span>
+          </div>
+          <hr class="rv-divider">
+          <div class="rv-line">
+            <span class="tok-header-key">Host:</span><span
+              class="tok-header-val"
+              id="req-host"
+            >—</span>
+          </div>
+          <div class="rv-line">
+            <span class="tok-header-key">Content-Length:</span><span
+              class="tok-error"
+            >invalid / malformed</span>
+          </div>
+          <div class="rv-line">
+            <span class="tok-header-key">Transfer-Encoding:</span><span
+              class="tok-error"
+            >conflicting directive</span>
+          </div>
+          <div class="rv-line">
+            <span class="tok-header-key">X-Forwarded-For:</span><span
+              class="tok-error"
+            >unparseable value</span>
+          </div>
+          <hr class="rv-divider">
+          <div class="rv-line">
+            <span style="color: #4a5568; font-size: 0.7rem"
+            >↳ request rejected before forwarding to upstream</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Specific issues -->
+      <div class="issues">
+        <div class="issues-header">
+          <span class="issues-title">Detected Issues</span>
+          <span class="issues-count">3 errors</span>
+        </div>
+        <div class="issue-row">
+          <span class="issue-bullet">✕</span>
+          <span class="issue-text"
+          >Malformed or missing <span class="issue-code">Host</span> header —
+            required for HTTP/1.1</span>
+        </div>
+        <div class="issue-row">
+          <span class="issue-bullet">✕</span>
+          <span class="issue-text"
+          >Both <span class="issue-code">Content-Length</span> and <span
+              class="issue-code"
+            >Transfer-Encoding</span> present — RFC 7230 violation</span>
+        </div>
+        <div class="issue-row">
+          <span class="issue-bullet">✕</span>
+          <span class="issue-text"
+          >Request line contains invalid characters or exceeds maximum URI
+            length</span>
+        </div>
+      </div>
+
+      <div class="meta-row">
+        <div class="meta-chip">timestamp &nbsp;<span id="ts">—</span></div>
+        <div class="meta-chip">request_id &nbsp;<span id="req-id">—</span></div>
+      </div>
+
+      <div class="actions">
+        <a href="javascript:history.back()" class="btn btn-primary"
+        >↩ &nbsp;Go Back</a>
+        <a href="/" class="btn btn-ghost">← &nbsp;Return Home</a>
+      </div>
+    </div>
+    <script>
+    document.getElementById("ts").textContent = new Date().toISOString();
+    document.getElementById("req-id").textContent = "req_"
+      + Math.random().toString(36).slice(2, 10).toUpperCase();
+    document.getElementById("req-path").textContent =
+      window.location.pathname + window.location.search || "/";
+    document.getElementById("req-host").textContent = window.location.hostname
+      || "unknown";
+    </script>
+  </body>
+</html>

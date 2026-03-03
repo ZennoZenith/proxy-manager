@@ -1,3 +1,13 @@
+[error_page]
+"default" = "examples/html/default.html"
+"400" = "examples/html/400.html"
+"403" = "examples/html/403.html"
+"404" = "examples/html/404.html"
+"500" = "examples/html/500.html"
+"502" = "examples/html/502.html"
+"503" = "examples/html/503.html"
+"504" = "examples/html/504.html"
+
 [[server]]
 enable = true
 name = ["ccc.zennozenith.com"]
@@ -38,6 +48,15 @@ http_code = 307
 preserve_path = true
 location = "https://pqr.zennozenith.com"
 
+[[server]]
+name = ["no.zennozenith.com"]
+
+[server.listen.http]
+port = [6188]
+
+[server.kind.proxy.direct]
+address = "127.0.0.1:9999"
+scheme.protocol = "http"
 
 [[server]]
 enable = true
@@ -65,7 +84,6 @@ port = [6188]
 
 [server.kind.proxy.loadbalanced]
 alg = "RoundRobin"
-
 
 [[server.kind.proxy.loadbalanced.backend]]
 scheme.protocol = "https"

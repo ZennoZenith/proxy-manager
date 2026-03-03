@@ -17,13 +17,13 @@ fn main() -> color_eyre::Result<()> {
         None => String::from("./config.toml"),
     };
 
-    #[cfg(debug_assertions)]
-    dbg!(&config_file_path);
+    // #[cfg(debug_assertions)]
+    // dbg!(&config_file_path);
 
     let config = lib_proxy_config::Config::load_from_path(config_file_path)?;
 
-    #[cfg(debug_assertions)]
-    dbg!(&config);
+    // #[cfg(debug_assertions)]
+    // dbg!(&config);
 
     lib_proxy::run(config)?;
 
