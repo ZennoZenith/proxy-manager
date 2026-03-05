@@ -56,6 +56,8 @@ pub struct Server {
     #[serde(default = "default_true")]
     pub enable: bool,
     pub name: HashSet<String>,
+    #[serde(default)]
+    pub force_ssl: bool,
     pub listen: Listen,
     // #[serde(flatten)]
     pub kind: ServerType,

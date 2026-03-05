@@ -55,31 +55,24 @@ impl Default for ErrorPages {
         let page_default = include_bytes!("../../../../examples/html/default.html")
             .to_vec()
             .into();
-
         let page_400 = include_bytes!("../../../../examples/html/400.html")
             .to_vec()
             .into();
-
         let page_403 = include_bytes!("../../../../examples/html/403.html")
             .to_vec()
             .into();
-
         let page_404 = include_bytes!("../../../../examples/html/404.html")
             .to_vec()
             .into();
-
         let page_500 = include_bytes!("../../../../examples/html/500.html")
             .to_vec()
             .into();
-
         let page_502 = include_bytes!("../../../../examples/html/502.html")
             .to_vec()
             .into();
-
         let page_503 = include_bytes!("../../../../examples/html/503.html")
             .to_vec()
             .into();
-
         let page_504 = include_bytes!("../../../../examples/html/504.html")
             .to_vec()
             .into();
@@ -167,9 +160,11 @@ pub(crate) enum ServerType {
     ProxyDirect {
         addr: SocketAddr,
         scheme: Scheme,
+        force_ssl: bool,
     },
     ProxyLoadBalanced {
         upstream: Upstream,
+        force_ssl: bool,
     },
 }
 
@@ -324,6 +319,7 @@ pub(crate) fn pingora_servers_from_config(
                     ServerType::ProxyDirect {
                         addr: address,
                         scheme: Scheme::from(scheme),
+                        force_ssl: server.force_ssl,
                     }
                 }
                 lib_proxy_config::ProxyType::LoadBalanced { alg: _alg, backend } => {
@@ -369,6 +365,7 @@ pub(crate) fn pingora_servers_from_config(
                     background_services.push(bg_service);
 
                     ServerType::ProxyLoadBalanced {
+                        force_ssl: server.force_ssl,
                         upstream: Upstream(load_balancer),
                     }
                 }

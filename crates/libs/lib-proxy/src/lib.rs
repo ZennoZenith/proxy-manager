@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use http::header::HOST;
+use lib_proxy_config::RedirectHttpCode;
 use pingora::{
     Error, ErrorSource, ErrorType,
     http::{RequestHeader, ResponseHeader},
@@ -75,6 +76,13 @@ impl MyErr {
             "text:Cannot determine host in upstream_request_filter phase",
         )
     }
+
+    fn unreachable_upstream_peer_force_ssl() -> Self {
+        Self::new(
+            500,
+            "text:Proxy *http* host should not have reached upstream_peer phase",
+        )
+    }
 }
 
 impl From<MyErr> for Box<Error> {
@@ -97,6 +105,48 @@ fn backend_http_peer(server_name: &str, backend: Backend) -> Box<HttpPeer> {
         .unwrap_or_else(|| server_name.to_string());
 
     Box::new(HttpPeer::new(backend, tls, sni))
+}
+
+async fn redirect_to(
+    location: &str,
+    http_code: RedirectHttpCode,
+    preserve_path: bool,
+    session: &mut Session,
+) -> Result<bool, Box<pingora::Error>> {
+    let location = if preserve_path
+        && let Some(path_and_query) = session.req_header().uri.path_and_query()
+        && let Some(base) = location.strip_suffix('/')
+    {
+        format!("{base}{}", path_and_query.as_str())
+    } else {
+        location.to_string()
+    };
+
+    let mut resp = ResponseHeader::build(Into::<u16>::into(http_code), None)?;
+    resp.append_header("Location", &location)?;
+    session.write_response_header(Box::new(resp), true).await?;
+
+    Ok(true)
+}
+
+fn is_http(session: &Session) -> bool {
+    // matches!(session.req_header().uri.scheme(), Some(v) if v.as_str() == "http")
+
+    // will provide a string like: TLSv1.3
+    match session.digest() {
+        Some(digest) => {
+            if let Some(_ssl_digest) = &digest.ssl_digest {
+                false
+            } else {
+                // unknown_tls_version
+                true
+            }
+        }
+        None => {
+            // unknown_tls_digest
+            false
+        }
+    }
 }
 
 #[derive(Default)]
@@ -153,20 +203,35 @@ impl ProxyHttp for HostsToServerType {
             location,
         })) = server_type
         {
-            let mut final_location = location.as_str().to_owned();
+            return redirect_to(location.as_str(), *http_code, *preserve_path, session).await;
+        };
 
-            if *preserve_path
-                && let Some(path_and_query) = session.req_header().uri.path_and_query()
-                && let Some(base) = final_location.strip_suffix('/')
-            {
-                final_location = format!("{base}{}", path_and_query.as_str());
-            }
+        if let Some(ServerType::ProxyDirect { force_ssl, .. }) = server_type
+            && *force_ssl
+            && is_http(session)
+        {
+            let location = format!("https://{}", host);
+            return redirect_to(
+                &location,
+                RedirectHttpCode::ParmanentRedirect,
+                true,
+                session,
+            )
+            .await;
+        };
 
-            let mut resp = ResponseHeader::build(Into::<u16>::into(http_code), None)?;
-            resp.append_header("Location", &final_location)?;
-            session.write_response_header(Box::new(resp), true).await?;
-
-            return Ok(true);
+        if let Some(ServerType::ProxyLoadBalanced { force_ssl, .. }) = server_type
+            && *force_ssl
+            && is_http(session)
+        {
+            let location = format!("https://{}", host);
+            return redirect_to(
+                &location,
+                RedirectHttpCode::ParmanentRedirect,
+                true,
+                session,
+            )
+            .await;
         };
 
         if let Some(ServerType::Custom {
@@ -204,7 +269,7 @@ impl ProxyHttp for HostsToServerType {
 
     async fn upstream_peer(
         &self,
-        _session: &mut Session,
+        session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<Box<HttpPeer>> {
         let Some(host) = ctx.host.clone() else {
@@ -229,14 +294,28 @@ impl ProxyHttp for HostsToServerType {
                 return Err(MyErr::unreachable_upstream_peer_redirect_server_type().into());
             }
             ServerType::ProxyDirect {
+                force_ssl,
                 addr,
                 scheme: Scheme::Http,
-            } => Box::new(HttpPeer::new(addr, false, String::new())),
+            } => {
+                if *force_ssl && is_http(session) {
+                    return Err(MyErr::unreachable_upstream_peer_force_ssl().into());
+                }
+                Box::new(HttpPeer::new(addr, false, String::new()))
+            }
             ServerType::ProxyDirect {
+                force_ssl: _,
                 addr,
                 scheme: Scheme::Https { sni },
             } => Box::new(HttpPeer::new(addr, true, sni.to_string())),
-            ServerType::ProxyLoadBalanced { upstream, .. } => {
+            ServerType::ProxyLoadBalanced {
+                upstream,
+                force_ssl,
+            } => {
+                if *force_ssl && is_http(session) {
+                    return Err(MyErr::unreachable_upstream_peer_force_ssl().into());
+                }
+
                 let backend = upstream
                     .select(b"", 256)
                     .ok_or(MyErr::no_healthy_upstream_peer())?;
