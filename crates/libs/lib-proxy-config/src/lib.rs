@@ -156,6 +156,8 @@ pub enum Scheme {
     Https {
         #[serde(default)]
         sni: String,
+        #[serde(default)]
+        insecure: bool,
     },
 }
 

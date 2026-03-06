@@ -73,14 +73,21 @@ ssl_certificate_key = "examples/keys/pqr.zennozenith.com/key.pem"
 
 [server.kind.proxy.direct]
 address = "127.0.0.1:4004"
-scheme = { protocol = "https", sni = "pqr.zennozenith.com" }
+scheme = { protocol = "https", sni = "pqr.zennozenith.com", insecure = true }
 
 [[server]]
 enable = true
 name = ["abc.zennozenith.com", "aaa.zennozenith.com"]
+force_ssl = true
 
 [server.listen.http]
 port = [6188]
+
+[server.listen.https]
+port = [6189]
+http2 = true
+ssl_certificate = "examples/keys/pqr.zennozenith.com/server.crt"
+ssl_certificate_key = "examples/keys/pqr.zennozenith.com/key.pem"
 
 [server.kind.proxy.loadbalanced]
 alg = "RoundRobin"

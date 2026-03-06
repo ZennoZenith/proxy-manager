@@ -93,14 +93,17 @@ impl Default for ErrorPages {
 #[derive(Clone, Debug)]
 pub(crate) enum Scheme {
     Http,
-    Https { sni: Box<str> },
+    Https { sni: Box<str>, insecure: bool },
 }
 
 impl From<lib_proxy_config::Scheme> for Scheme {
     fn from(value: lib_proxy_config::Scheme) -> Self {
         match value {
             lib_proxy_config::Scheme::Http => Self::Http,
-            lib_proxy_config::Scheme::Https { sni } => Self::Https { sni: sni.into() },
+            lib_proxy_config::Scheme::Https { sni, insecure } => Self::Https {
+                sni: sni.into(),
+                insecure,
+            },
         }
     }
 }
@@ -111,6 +114,10 @@ impl Scheme {
             Scheme::Http => false,
             Scheme::Https { .. } => true,
         }
+    }
+
+    pub fn is_insecure(&self) -> bool {
+        matches!(self, Scheme::Https { insecure, .. } if *insecure)
     }
 }
 

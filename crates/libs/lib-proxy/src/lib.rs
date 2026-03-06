@@ -92,11 +92,11 @@ impl From<MyErr> for Box<Error> {
 }
 
 fn backend_http_peer(server_name: &str, backend: Backend) -> Box<HttpPeer> {
-    let tls = backend
-        .ext
-        .get::<Scheme>()
-        .map(|v| v.is_https())
-        .unwrap_or(false);
+    let scheme = backend.ext.get::<Scheme>();
+
+    let tls = scheme.map(|v| v.is_https()).unwrap_or(false);
+
+    let insecure = scheme.map(|v| v.is_insecure()).unwrap_or(false);
 
     let sni = backend
         .ext
@@ -104,7 +104,11 @@ fn backend_http_peer(server_name: &str, backend: Backend) -> Box<HttpPeer> {
         .cloned()
         .unwrap_or_else(|| server_name.to_string());
 
-    Box::new(HttpPeer::new(backend, tls, sni))
+    let mut peer = HttpPeer::new(backend, tls, sni);
+    peer.options.verify_cert = !insecure;
+    peer.options.verify_hostname = !insecure;
+
+    Box::new(peer)
 }
 
 async fn redirect_to(
@@ -286,7 +290,7 @@ impl ProxyHttp for HostsToServerType {
             return Err(MyErr::no_upstream_peer().into());
         };
 
-        let mut peer = match server_type {
+        let peer = match server_type {
             ServerType::Custom { .. } => {
                 return Err(MyErr::unreachable_upstream_peer_custom_server_type().into());
             }
@@ -306,8 +310,14 @@ impl ProxyHttp for HostsToServerType {
             ServerType::ProxyDirect {
                 force_ssl: _,
                 addr,
-                scheme: Scheme::Https { sni },
-            } => Box::new(HttpPeer::new(addr, true, sni.to_string())),
+                scheme: Scheme::Https { sni, insecure },
+            } => {
+                let mut peer = HttpPeer::new(addr, true, sni.to_string());
+                peer.options.verify_cert = !insecure;
+                peer.options.verify_hostname = !insecure;
+
+                Box::new(peer)
+            }
             ServerType::ProxyLoadBalanced {
                 upstream,
                 force_ssl,
@@ -326,12 +336,6 @@ impl ProxyHttp for HostsToServerType {
                 backend_http_peer(host.as_ref(), backend)
             }
         };
-
-        #[cfg(debug_assertions)]
-        {
-            peer.options.verify_cert = false;
-            peer.options.verify_hostname = false;
-        }
 
         Ok(peer)
     }
